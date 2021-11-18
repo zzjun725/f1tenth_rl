@@ -40,7 +40,7 @@ In that case, further adjustment about the reward and the way of sampling experi
 
 The original observation space is a 1080-dimension np.ndarray contained all the information of the beams. However, I think those information might be redundant for our task because with lower sample rate, it is still possible to derive the relative distance of the boundary and the car. As a result, I did uniform sampling on the original observation space and reduce the dimension to 108.
 
-<img src="C:\Users\zzjun\AppData\Roaming\Typora\typora-user-images\image-20211118151713940.png" alt="image-20211118151713940" style="zoom:63%;" /><img src="C:\Users\zzjun\AppData\Roaming\Typora\typora-user-images\image-20211118151730035.png" alt="image-20211118151730035" style="zoom:63%;" />
+<img src=".\result\ddqn\image\obs108" alt="image-20211118151713940" style="zoom:63%;" /><img src=".\result\ddqn\image\obs1080" alt="image-20211118151730035" style="zoom:63%;" />
 
 Take an example of the beam scan information of a specific position of the car in the f1tenth gym environment. It can be shown from the picture that the features are nearly the same with uniform sampling and the curve is more smooth.
 
@@ -58,10 +58,10 @@ I also tried adding the reduction of speed to the action space, but it turned ou
 
 A typical training result is demonstrated as followed. 
 
-![image-20211118121124500](D:\Code_Projects\f1tenth_gym\examples\RL_example\result\ddqn\image\reward)
+![image-20211118121124500](.\result\ddqn\image\reward)
 
  
 
-![image-20211118121159984](D:\Code_Projects\f1tenth_gym\examples\RL_example\result\ddqn\image\loss)
+![image-20211118121159984](.\result\ddqn\image\loss)
 
 Clearly this agent has not learn enough information. some model get high score in evaluation just because they keep turning a circle in the beginning.
