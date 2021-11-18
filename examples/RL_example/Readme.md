@@ -58,10 +58,10 @@ I also tried adding the reduction of speed to the action space, but it turned ou
 
 A typical training result is demonstrated as followed. 
 
-![image-20211118121124500](.\result\ddqn\image\reward)
+<img src=".\result\ddqn\image\reward" alt="image-20211118121124500"  />
 
  
 
-![image-20211118121159984](.\result\ddqn\image\loss)
+<img src=".\result\ddqn\image\loss" alt="image-20211118121159984"  />
 
 Clearly this agent has not learn enough information. some model get high score in evaluation just because they keep turning a circle in the beginning.
