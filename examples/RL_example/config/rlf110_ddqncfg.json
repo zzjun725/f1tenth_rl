@@ -1,0 +1,6 @@
+{
+    "task_name": "ddqn",
+    "result_dir": "D:\\Code_Projects\\f1tenth_gym\\examples\\RL_example\\result\\ddqn",
+    "log_dir": "D:\\Code_Projects\\f1tenth_gym\\examples\\RL_example\\result\\ddqn\\logs",
+    "model_dir": "D:\\Code_Projects\\f1tenth_gym\\examples\\RL_example\\result\\ddqn\\models"
+}
