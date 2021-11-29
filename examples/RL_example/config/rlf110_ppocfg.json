@@ -1,0 +1,6 @@
+{
+    "task_name": "ppo",
+    "result_dir": "D:\\Code_Projects\\f1tenth_gym\\examples\\RL_example\\result\\ppo",
+    "log_dir": "D:\\Code_Projects\\f1tenth_gym\\examples\\RL_example\\result\\ppo\\logs",
+    "model_dir": "D:\\Code_Projects\\f1tenth_gym\\examples\\RL_example\\result\\ppo\\models"
+}

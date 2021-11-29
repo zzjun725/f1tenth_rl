@@ -236,6 +236,8 @@ class D3QNAgent:
             max_epsilon: float = 0.8,
             min_epsilon: float = 0.1,
             gamma: float = 0.99,
+            beta: float = 0.6,
+            prior_eps: float = 1e-6,
             conf=None
     ):
         self.config = conf
@@ -254,6 +256,8 @@ class D3QNAgent:
         self.reduc_epsilon = 0.05
         self.target_update = target_update
         self.gamma = gamma
+        self.beta = beta
+        self.prior_eps = prior_eps
 
         # device: cpu / gpu
         self.device = torch.device(
@@ -354,18 +358,33 @@ class D3QNAgent:
             obs = next_obs
             score += reward
 
+            # update beta
+            # fraction = min(step_idx / num_steps, 1.0)
+            # self.beta = self.beta + fraction * (1.0 - self.beta)
+
             # if episode ends
             if done:
-                obs = self.env.reset()
                 scores.append(score)
                 score = 0
                 if len(scores) > 20:
                     self.update_epsilons(scores)
                 epsilons.append(self.epsilon)
+                obs = self.env.reset()
 
             if len(self.memory) >= self.batch_size:
+                # samples = self.memory.sample_batch(self.beta)
                 samples = self.memory.sample_batch()
-                loss = self._compute_dqn_loss(samples)
+                # PER
+                # weights = torch.FloatTensor(
+                #     samples["weights"].reshape(-1, 1)
+                # ).to(self.device)
+                # indices = samples["indices"]
+                # elementwise_loss = self._compute_dqn_loss(samples, elementwise=True)
+                # loss = torch.mean(elementwise_loss * weights)
+                # PER
+
+                ## LOSS and clip grad
+                loss = self._compute_dqn_loss(samples, elementwise=False)
                 self.optimizer.zero_grad()
                 loss.backward()
                 clip_grad_norm_(self.dqn.parameters(), 10.0)
@@ -373,25 +392,30 @@ class D3QNAgent:
                 losses.append(loss.item())
                 update_cnt += 1
 
+                # PER: update priorities
+                # loss_for_prior = elementwise_loss.detach().cpu().numpy()
+                # new_priorities = loss_for_prior + self.prior_eps
+                # self.memory.update_priorities(indices, new_priorities)
 
-                # if hard update is needed
+                ## update target Q-net
                 if update_cnt % self.target_update == 0:
                     self._target_hard_update()
 
-            # save_model
+            ## save_model
             if step_idx % save_interval == 0 and step_idx > 1:
                 self.save(f'step{step_idx}')
                 cur_score = self.eval(reload_model=False, render=False)
-                if cur_score >= best_score:
+                if cur_score >= best_score or cur_score >= 8:
                     self.save(f'bestmodel_step{step_idx}')
                     best_score = cur_score
                 self.is_test = False
 
-            # plotting
+            ## plotting
             if step_idx % render_interval == 0 and step_idx > 1:
                 self._plot(step_idx, scores, losses, epsilons)
                 self.test(render=True)
-                print('episode', len(scores))
+                print('episode', len(scores), '  steps', step_idx)
+                print('current_score', np.mean(scores[-10:]))
                 # self.is_test = False
 
         self.env.close()
@@ -417,7 +441,7 @@ class D3QNAgent:
         print('test_scores', np.round(np.array(scores), 4))
         self.env.close()
 
-    def _compute_dqn_loss(self, samples: Dict[str, np.ndarray]) -> torch.Tensor:
+    def _compute_dqn_loss(self, samples: Dict[str, np.ndarray], elementwise=False) -> torch.Tensor:
         device = self.device
         state = torch.FloatTensor(samples["obs"]).to(device)
         next_state = torch.FloatTensor(samples["next_obs"]).to(device)
@@ -433,7 +457,10 @@ class D3QNAgent:
         target = (reward + self.gamma * next_q_value * mask).to(self.device)
 
         # calculate dqn loss
-        loss = F.smooth_l1_loss(curr_q_value, target)
+        if elementwise:
+            loss = F.smooth_l1_loss(curr_q_value, target, reduction='none')
+        else:
+            loss = F.smooth_l1_loss(curr_q_value, target)
 
         return loss
 
@@ -450,14 +477,14 @@ class D3QNAgent:
     ):
         """Plot the training progresses."""
         clear_output(True)
-        plt.figure(figsize=(20, 5))
-        plt.subplot(131)
+        plt.figure(figsize=(10, 24))
+        plt.subplot(311)
         plt.title('frame %s. score: %s' % (frame_idx, np.mean(scores[-10:])))
         plt.plot(scores)
-        plt.subplot(132)
+        plt.subplot(312)
         plt.title('frame %s. loss: %s' % (frame_idx, np.mean(losses)))
         plt.plot(losses)
-        plt.subplot(133)
+        plt.subplot(313)
         plt.title('epsilons')
         plt.plot(epsilons)
         plt.show()
@@ -465,8 +492,8 @@ class D3QNAgent:
 
 if __name__ == '__main__':
     # test agent
+    # env_id = "MountainCar-v0"
     env_id = "CartPole-v0"
-    # env_id = "CartPole-v0"
     env = gym.make(env_id)
     seed = 777
 
@@ -484,7 +511,7 @@ if __name__ == '__main__':
     num_frames = 200000
     memory_size = 1000
     batch_size = 32
-    target_update = 100
+    target_update = 100  # update in 100 episode
     epsilon_decay = 1 / 100
 
     agent = D3QNAgent(env, memory_size, batch_size, target_update, epsilon_decay, conf=None)

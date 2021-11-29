@@ -21,15 +21,16 @@ os.makedirs(cfg.log_dir, exist_ok=True)
 os.makedirs(cfg.model_dir, exist_ok=True)
 
 # parameters
-steps = 200000
-memory_size = 1000
-batch_size = 64
-target_update = 100
-epsilon_decay = 1 / 20000
+steps = 1000000
+memory_size = 5000
+batch_size = 128
+target_update = 50
+epsilon_decay = 1 / 1000
 
 agent = D3QNAgent(env, memory_size, batch_size, target_update, epsilon_decay, conf=cfg)
-# agent.train(steps, render_interval=1000)
+agent.train(steps, render_interval=5000)
 
 # eval
-# model_name = 'step60000.pkl'
+# model_name = 'bestmodel_step30000.pkl'
 # agent.eval(reload_model=True, render=True, model=model_name)
+# agent.train(steps, render_interval=2000)
