@@ -32,13 +32,13 @@ the entry of training or evaluation task.
 
 After some fine-tuning on the hyper-parameters and adjustments on the environment design,  The trained agent is able to run over the given map without collision. 
 
-![un_collision_model1](.\examples\RL_example\result\others\un_collision_model1.gif)
+<img src=".\examples\RL_example\result\others\un_collision_model1.gif" alt="un_collision_model1"  />
 
 In multiple experiments with similar parameters, after training for a lot episodes the car seems to converge to a 'wiggle' between left and right even when it is racing on a straight road.
 
 Besides, an agent which generate smooth path might occur in the middle of training and it already had a fair performance. The video below illustrated an agent which only fail to pass one corner in the whole map. 
 
-<video src=".\examples\RL_example\result\others\smooth_path.mp4"></video>
+<img src=".\examples\RL_example\result\others\smooth_path.gif" alt="smooth_path"  />
 
 
 
@@ -110,15 +110,15 @@ It is worth noting that during the training process, I have observed several int
 
 - Turning around
 
-<video src=".\examples\RL_example\result\others\tuningaround.mp4"></video>
+<img src=".\examples\RL_example\result\others\turning_around.gif" alt="turning_around"  />
 
 - Turning back
 
-<video src=".\examples\RL_example\result\others\turning_back.mp4"></video>
+<img src=".\examples\RL_example\result\others\turning_back.gif" alt="turning_back"  />
 
 However, the best model always tend to has a 'wiggle' feature during the whole time, maybe taking the action of turning left or right gives the car more opportunities to pass the corner.
 
-<video src=".\examples\RL_example\result\others\wiggle_2.mp4"></video>
+<img src="D:\Code_Projects\f1tenth_gym\examples\RL_example\result\others\wiggle_2.gif" alt="wiggle_2"  />
 
 
 
