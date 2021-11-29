@@ -32,7 +32,7 @@ the entry of training or evaluation task.
 
 After some fine-tuning on the hyper-parameters and adjustments on the environment design,  The trained agent is able to run over the given map without collision. 
 
-<video src=".\examples\RL_example\result\others\un_collision_model1.mp4"></video>
+![un_collision_model1](.\examples\RL_example\result\others\un_collision_model1.gif)
 
 In multiple experiments with similar parameters, after training for a lot episodes the car seems to converge to a 'wiggle' between left and right even when it is racing on a straight road.
 
@@ -98,13 +98,13 @@ I set the maximum episode to 5000, but usually 600-700 episodes are enough for t
 
 After several training test, I find out the success rate is highly depending on the exploration in the beginning. For example, it might be the case that the agent is stuck in a local minima of turning a circle or just keeping going straight whatever the environments are. Adding the penalty on hitting the wall as well as being too close to the wall alleviate this situation.
 
-![ppo_cyclefail](.\examples\RL_example\result\others\ppo_cyclefail.PNG)
+<img src=".\examples\RL_example\result\others\ppo_cyclefail.PNG" alt="ppo_cyclefail"  />
 
 This curve above demonstrated a typical result of training an agent which just turn around all the time until it hit the wall.
 
  As for a success trained model, the curve of score is more bouncing with a obvious rising trend:
 
-![ppo_speed4_action3_success](.\examples\RL_example\result\others\ppo_speed4_action3_success.PNG)
+<img src=".\examples\RL_example\result\others\ppo_speed4_action3_success.PNG" alt="ppo_speed4_action3_success"  />
 
 It is worth noting that during the training process, I have observed several interesting behaviors of the agent.
 
