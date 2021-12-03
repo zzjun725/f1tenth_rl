@@ -126,7 +126,7 @@ However, the best model always tend to has a 'wiggle' feature during the whole t
 
 # Training with DQN
 
-When it comes to DQN, the result is not as good as PPO. After converge, the agent just tend to turn around forever or do nothing but go straight. I think more adjustments may be needed training with DQN to get a fair result.
+When it comes to DQN, the result is not as good as PPO. After converge, the agent just tend to turn around forever or do nothing but go straight. The current agent structure is D3QN (with dueling network and double DQN). I think more adjustments may be needed training with DQN to get a fair result.
 
 A typical training result is demonstrated as followed. 
 
