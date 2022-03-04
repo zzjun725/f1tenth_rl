@@ -1,3 +1,6 @@
+# Environment
+This is a RL algorithm test based on the [f1tenth_gym environment](https://github.com/f1tenth/f1tenth_gym).
+
 # Usage
 
 - generate training config `get_rlConfig.py`
