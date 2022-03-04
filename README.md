@@ -34,6 +34,8 @@ After some fine-tuning on the hyper-parameters and adjustments on the environmen
 
 <img src=".\examples\RL_example\result\others\un_collision_model1.gif" alt="un_collision_model1"  />
 
+Because of the limitation of the length of gif format, check 'un_collision_model1.mp4' in the same directory for the full video.
+
 In multiple experiments with similar parameters, after training for a lot episodes the car seems to converge to a 'wiggle' between left and right even when it is racing on a straight road.
 
 Besides, an agent which generate smooth path might occur in the middle of training and it already had a fair performance. The video below illustrated an agent which only fail to pass one corner in the whole map. 
