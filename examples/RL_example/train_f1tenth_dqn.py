@@ -5,7 +5,7 @@ import yaml
 from argparse import Namespace
 from utils import render_callback, path_filler
 from f110_rlenv import F110Env_Discrete_Action
-from d3qn_agent import D3QNAgent
+from baselineAgents.d3qn_agent import D3QNAgent
 
 with open('./config_example_map.yaml') as file:
     conf_dict = yaml.load(file, Loader=yaml.FullLoader)

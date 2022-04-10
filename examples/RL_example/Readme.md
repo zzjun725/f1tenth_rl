@@ -1,8 +1,8 @@
 # Usage
 
-- generate training config `get_rlConfig.py`
-- train/ evaluation with D3QN  `train_f1tenth_dqn.py`
-- train/ evaluation with PPO `train_f1tenth_ppo.py`
+- The training configs are stored in the config directory. Run `get_rlConfig.py` to get a new config.
+- Train/ evaluation with D3QN  `train_f1tenth_dqn.py`
+- Train/ evaluation with PPO `train_f1tenth_ppo.py`
 
 # Module Definition
 

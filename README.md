@@ -1,6 +1,14 @@
 # Environment
 This is a RL algorithm test based on the [f1tenth_gym environment](https://github.com/f1tenth/f1tenth_gym).
 
+Install the environment: inside this repo, run 
+
+`pip3 install --user -e gym/`
+
+Install other requirements:
+
+`pip install -r requirements.txt` 
+
 # Usage
 
 - generate training config `get_rlConfig.py`

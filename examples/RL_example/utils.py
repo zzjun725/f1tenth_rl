@@ -19,3 +19,4 @@ def render_callback(env_renderer):
 def path_filler(path):
     abs_path = os.path.abspath(os.path.join('.', path))
     return abs_path
+

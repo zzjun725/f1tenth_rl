@@ -9,3 +9,5 @@ gym/f110_gym/unittest/centerline/
 docs/_build/
 *.mypy_cache/
 flycheck_*
+*.mp4
+**/mlruns
