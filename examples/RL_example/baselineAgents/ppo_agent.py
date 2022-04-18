@@ -7,7 +7,7 @@ from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import MultivariateNormal
+from torch.distributions import Normal # MultivariateNormal
 from torch.distributions import Categorical
 import torch.optim as optim
 import matplotlib.pyplot as plt
@@ -15,6 +15,7 @@ import numpy as np
 import random
 from torch.nn.utils import clip_grad_norm
 import gym
+from tqdm import tqdm
 
 
 class RolloutBuffer:
@@ -49,7 +50,7 @@ class RolloutBuffer:
 
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, continuous_action=False, device=None, action_std_init=0):
+    def __init__(self, state_dim, action_dim, continuous_action=False, device=None, action_var_init=0.1):
         super(Actor, self).__init__()
         self.continuous_action = continuous_action
         self.net = nn.Sequential(
@@ -60,13 +61,14 @@ class Actor(nn.Module):
             nn.Linear(128, action_dim),
         )
         if self.continuous_action:
-            self.action_dim = action_dim
-            self.action_var = torch.full((action_dim,), action_std_init * action_std_init).to(device)
+            # self.action_dim = action_dim
+            # self.action_var = torch.full((action_dim,), action_std_init * action_std_init).to(device)
+            self.action_var = torch.tensor([action_var_init]).to(device)
 
     def forward(self, x):
         x = self.net(x)
         if self.continuous_action:
-            action_mean = F.tanh(x)
+            action_mean = torch.tanh(x)
             return action_mean
         else:
             action_prob = F.softmax(x, dim=1)
@@ -75,16 +77,19 @@ class Actor(nn.Module):
     def act(self, x):
         if self.continuous_action:
             action_mean = self.forward(x)
-            cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
-            dist = MultivariateNormal(action_mean, cov_mat)
+            # cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
+            dist = Normal(action_mean, self.action_var)
+            action_logits = action_mean
         else:
-            action_probs = self.actor(x)
+            action_probs = self.forward(x)
             dist = Categorical(action_probs)
+            action_logits = action_probs
 
         action = dist.sample()
         action_logprob = dist.log_prob(action)
 
-        return action.detach(), action_logprob.detach()
+        # TODO: Check detach
+        return action.detach(), action_logprob.detach(), action_logits.detach()
 
 
 class Critic(nn.Module):
@@ -125,14 +130,18 @@ class PPOAgent:
 
         self.buffer = RolloutBuffer()
 
+        self.continuous_action = continuous_action
         state_dim = env.observation_space.shape[0]
-        action_dim = env.action_space.n
+        if continuous_action:
+            action_dim = 1
+        else:
+            action_dim = env.action_space.n
         self.actor = Actor(state_dim, action_dim, continuous_action).to(device)
         self.critic = Critic(state_dim).to(device)
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr_actor)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=lr_critic)
 
-        self.actor_old = Actor(state_dim, action_dim).to(device)
+        self.actor_old = Actor(state_dim, action_dim, continuous_action).to(device)
         self.actor_old.load_state_dict(self.actor.state_dict())
 
     def put_data(self, *transtion):
@@ -164,14 +173,18 @@ class PPOAgent:
             advantage = torch.tensor(advantage_lst, dtype=torch.float).to(self.device)
 
             pi = self.actor(s)
-            pi_a = pi.gather(1, a)
-            ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
+            if self.continuous_action:
+                ratio = pi / (prob_a + 1e-5)
+            else:
+                pi_a = pi.gather(1, a)
+                ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
 
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1 - self.eps_clip, 1 + self.eps_clip) * advantage
 
             critic_loss = F.smooth_l1_loss(self.critic(s), td_target.detach())
             actor_loss = -torch.min(surr1, surr2).mean()
+            # print('actor_loss', actor_loss)
             loss = actor_loss + critic_loss
             actor_loss_sum += actor_loss.item()
             critic_loss_sum += critic_loss.item()
@@ -195,7 +208,7 @@ class PPOAgent:
         actor_losses = []
         critic_losses = []
         best_score = -np.inf
-        for n_epi in range(episode_num):
+        for n_epi in tqdm(range(episode_num)):
             s = self.env.reset()
             self.env.render()
             done = False
@@ -203,18 +216,24 @@ class PPOAgent:
             while not done:
                 for i in range(update_interval):
                     total_timestep += 1
-                    prob = self.actor_old(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
-                    # print(prob)
-                    m = Categorical(prob)
-                    a = m.sample().item()
+                    # prob = self.actor_old(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
+                    # # print(prob)
+                    # m = Categorical(prob)
+                    # a = m.sample().item()
+                    a, _, prob = self.actor_old.act(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
+
                     s_next, r, done, info = self.env.step(a)
                     self.env.render()
-                    self.put_data(*(s, a, r/100, s_next, prob[0][a].item(), done))
+                    if self.continuous_action:
+                        self.put_data(*(s, a, r/100, s_next, prob[0].item(), done))
+                    else:
+                        self.put_data(*(s, a, r/100, s_next, prob[0][a].item(), done))
                     s = s_next
                     score += r
                     if total_timestep % render_interval == 0:
                         print("# of episode :{}, last 10 ep avg score : {:.1f}".format(n_epi, np.mean(scores[-10:])))
-                        self._plot(total_timestep, scores, actor_losses, critic_losses)
+                        print('scores', np.mean(scores), 'actor_losses', np.mean(actor_losses), 'critic_losses', np.mean(critic_losses))
+                        # self._plot(total_timestep, scores, actor_losses, critic_losses)
                         cur_score = self.eval(reload_model=False, render=True, episode_num=eval_episode)
                         print(f'test for {eval_episode} episodes, mean score{cur_score}')
                     if total_timestep % save_interval == 0:
@@ -284,7 +303,7 @@ def main():
     # env = gym.make('MountainCar-v0').unwrapped
     env = gym.make('CartPole-v0')
     model = PPOAgent(env=env, lr_actor=0.001, lr_critic=0.001, gamma=0.99, K_epochs=3,
-                     eps_clip=0.1)
+                     eps_clip=0.1, continuous_action=False)
     score = 0.0
     print_interval = 20
     T_horizon = 20
