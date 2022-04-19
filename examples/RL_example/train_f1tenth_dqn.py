@@ -2,6 +2,7 @@
 import json
 import os
 import yaml
+from dqn_pid_policy import get_train_data
 from argparse import Namespace
 from utils import render_callback, path_filler
 from f110_rlenv import F110Env_Discrete_Action
@@ -9,7 +10,7 @@ from baselineAgents.d3qn_agent import D3QNAgent
 
 with open('./config_example_map.yaml') as file:
     conf_dict = yaml.load(file, Loader=yaml.FullLoader)
-conf = Namespace(**conf_dict)
+    conf = Namespace(**conf_dict)
 env = F110Env_Discrete_Action(conf=conf)
 env.f110.add_render_callback(render_callback)
 
@@ -22,12 +23,13 @@ os.makedirs(cfg.model_dir, exist_ok=True)
 
 # parameters
 steps = 1000000
-memory_size = 5000
-batch_size = 128
-target_update = 50
-epsilon_decay = 1 / 1000
+memory_size = 5000 # 5000
+batch_size = 300 # 128
+target_update = 2 # 50
+epsilon_decay = 1 / 10000 # 1/1000
 
-agent = D3QNAgent(env, memory_size, batch_size, target_update, epsilon_decay, conf=cfg)
+rb = get_train_data(memory_size, batch_size)
+agent = D3QNAgent(env, memory_size, batch_size, target_update, epsilon_decay, rb=rb, conf=cfg)
 agent.train(steps, render_interval=5000)
 
 # eval

@@ -2,6 +2,7 @@
 from typing import Dict, List, Tuple
 
 import gym
+import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -235,19 +236,22 @@ class D3QNAgent:
             epsilon_decay: float,
             max_epsilon: float = 0.8,
             min_epsilon: float = 0.1,
-            gamma: float = 0.99,
+            gamma: float = 0.90,
             beta: float = 0.6,
             prior_eps: float = 1e-6,
+            rb=None, # (*****) starter replay buffer from pid controller
             conf=None
     ):
         self.config = conf
+        
+        self.alpha_ave = 0.05  # (*****) add alpha as the weight used when averaging models
 
         # obs_dim = env.observation_space.shape[0]
         obs_dim = env.observation_space.shape[0]
         action_dim = env.action_space.n
 
         self.env = env
-        self.memory = ReplayBuffer(obs_dim, memory_size, batch_size)
+        self.memory = ReplayBuffer(obs_dim, memory_size, batch_size) if rb == None else rb # (tabulate memory with starter replay buffer)
         self.batch_size = batch_size
         self.epsilon = max_epsilon
         self.epsilon_decay = epsilon_decay
@@ -399,12 +403,13 @@ class D3QNAgent:
 
                 ## update target Q-net
                 if update_cnt % self.target_update == 0:
-                    self._target_hard_update()
+                    #self._target_hard_update()
+                    self._target_average_update(self.alpha_ave) # (*****) changed the previous model delay method to model averaging method
 
             ## save_model
             if step_idx % save_interval == 0 and step_idx > 1:
                 self.save(f'step{step_idx}')
-                cur_score = self.eval(reload_model=False, render=False)
+                cur_score = self.eval(reload_model=False, render=False) # (*****) changed render to true
                 if cur_score >= best_score or cur_score >= 8:
                     self.save(f'bestmodel_step{step_idx}')
                     best_score = cur_score
@@ -413,7 +418,7 @@ class D3QNAgent:
             ## plotting
             if step_idx % render_interval == 0 and step_idx > 1:
                 self._plot(step_idx, scores, losses, epsilons)
-                self.test(render=True)
+                self.test(render=True) # (*****) changed render to False
                 print('episode', len(scores), '  steps', step_idx)
                 print('current_score', np.mean(scores[-10:]))
                 # self.is_test = False
@@ -460,13 +465,24 @@ class D3QNAgent:
         if elementwise:
             loss = F.smooth_l1_loss(curr_q_value, target, reduction='none')
         else:
-            loss = F.smooth_l1_loss(curr_q_value, target)
-
+            #loss = F.smooth_l1_loss(curr_q_value, target)
+            loss = F.mse_loss(curr_q_value, target) # (*****) try higher loss value
         return loss
 
     def _target_hard_update(self):
         """Hard update: target <- local."""
         self.dqn_target.load_state_dict(self.dqn.state_dict())
+    
+    def _target_average_update(self, alpha_ave=0.05): # (*****)
+        """Average update: target is an average of past model params"""
+        sdpred, sdtarget = self.dqn.state_dict(), self.dqn_target.state_dict()
+        
+        # compute the updated parameters for dqn_target
+        for key in sdpred:
+            sdtarget[key] = (1-alpha_ave)*sdtarget[key] + alpha_ave*sdpred[key]
+        
+        # update the dqn_target model
+        self.dqn_target.load_state_dict(sdtarget)
 
     def _plot(
             self,
@@ -508,11 +524,11 @@ if __name__ == '__main__':
     seed_torch(seed)
     env.seed(seed)
     # parameters
-    num_frames = 200000
-    memory_size = 1000
-    batch_size = 32
+    num_frames = 10000 #200000
+    memory_size = 1000 #1000
+    batch_size = 30 #32
     target_update = 100  # update in 100 episode
-    epsilon_decay = 1 / 100
+    epsilon_decay =  1 / 100
 
     agent = D3QNAgent(env, memory_size, batch_size, target_update, epsilon_decay, conf=None)
     agent.train(num_frames, render_interval=1000)

@@ -1,6 +1,6 @@
 {
     "task_name": "ppo",
-    "result_dir": "/home/mlab/zhijunz/f1tenth_rl/examples/RL_example/result/ppo",
-    "log_dir": "/home/mlab/zhijunz/f1tenth_rl/examples/RL_example/result/ppo/logs",
-    "model_dir": "/home/mlab/zhijunz/f1tenth_rl/examples/RL_example/result/ppo/models"
+    "result_dir": "C:\\Users\\gurub\\Desktop\\Learning in Robotics\\Final_Project\\ZZJ_git\\f1tenth_rl-main\\examples\\RL_example\\result\\ppo",
+    "log_dir": "C:\\Users\\gurub\\Desktop\\Learning in Robotics\\Final_Project\\ZZJ_git\\f1tenth_rl-main\\examples\\RL_example\\result\\ppo\\logs",
+    "model_dir": "C:\\Users\\gurub\\Desktop\\Learning in Robotics\\Final_Project\\ZZJ_git\\f1tenth_rl-main\\examples\\RL_example\\result\\ppo\\models"
 }
