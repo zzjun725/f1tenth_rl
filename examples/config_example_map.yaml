@@ -13,7 +13,7 @@ sy: 0.0
 stheta: 1.37079632679
 
 # raceline path and indices
-wpt_path: './example_waypoints.csv'
+wpt_path: './new_wp.csv'
 wpt_delim: ';'
 wpt_rowskip: 3
 wpt_xind: 1

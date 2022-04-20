@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Tuple
 import torch
 import numpy as np
+from baselineAgents.gap_follow_agent import Gap_follower
 from pydreamer.models import Dreamer
 from pydreamer.preprocessing import Preprocessor
 from pydreamer.models import *
@@ -15,6 +16,24 @@ class RandomPolicy:
 
     def __call__(self, obs) -> Tuple[int, dict]:
         return self.action_space.sample(), {}
+
+
+class PurePursuitPolicy:
+    def __init__(self):
+        pass
+
+    def __call__(self, obs):
+        pass
+
+class GapFollowPolicy:
+    def __init__(self):
+        self.model = Gap_follower()
+
+    def __call__(self, raw_obs):
+        scan = raw_obs['scans'][0]
+        action, target = self.model.planning(scan)
+        return action, {'target_idx': target}
+        
 
 
 class NetworkPolicy:

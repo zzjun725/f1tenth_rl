@@ -5,7 +5,7 @@ import numpy as np
 
 
 def path_filler(path):
-    abs_path = os.path.abspath(os.path.join('..', path))
+    abs_path = os.path.abspath(os.path.join('.', path))
     return abs_path
 
 
@@ -20,11 +20,12 @@ def fill_cfg(task):
     return default_cfg
 
 
-def get_rlf110_cfg(task='ddqn'):
-    cfg = fill_cfg(task)
+def get_rlf110_cfg(task='ddqn', cfg=None):
+    if not cfg:
+        cfg = fill_cfg(task)
     os.makedirs(os.path.join(path_filler('config')), exist_ok=True)
     json.dump(cfg, open(os.path.join(path_filler('config'), f'rlf110_{task}cfg.json'), 'w'), indent=4)
 
 
 if __name__ == '__main__':
-    get_rlf110_cfg(task='ppo')
+    get_rlf110_cfg(task='ddqn')

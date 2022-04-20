@@ -10,7 +10,7 @@ import random
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from segment_tree import MinSegmentTree, SumSegmentTree
+# from segment_tree import MinSegmentTree, SumSegmentTree
 from torch.nn.utils import clip_grad_norm_
 from IPython.display import clear_output
 import os

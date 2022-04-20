@@ -7,7 +7,7 @@ from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Normal # MultivariateNormal
+from torch.distributions import Normal, MultivariateNormal
 from torch.distributions import Categorical
 import torch.optim as optim
 import matplotlib.pyplot as plt
@@ -53,54 +53,77 @@ class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, continuous_action=False, device=None, action_var_init=0.1):
         super(Actor, self).__init__()
         self.continuous_action = continuous_action
+        self.continuous_action_scale = 2.0
         self.net = nn.Sequential(
-            nn.Linear(state_dim, 128),
+            nn.Linear(state_dim, 64),
             nn.LeakyReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(64, 64),
             nn.LeakyReLU(),
-            nn.Linear(128, action_dim),
+            nn.Linear(64, action_dim),
         )
+        
         if self.continuous_action:
-            # self.action_dim = action_dim
-            # self.action_var = torch.full((action_dim,), action_std_init * action_std_init).to(device)
-            self.action_var = torch.tensor([action_var_init]).to(device)
+            self.action_dim = action_dim
+            self.action_var = torch.full((action_dim,), action_var_init).to(device)
+            # self.action_var = torch.tensor([action_var_init]).to(device)
+        self.device = device
 
     def forward(self, x):
         x = self.net(x)
         if self.continuous_action:
             action_mean = torch.tanh(x)
-            return action_mean
+            return action_mean * self.continuous_action_scale
         else:
-            action_prob = F.softmax(x, dim=1)
+            action_prob = F.softmax(x, dim=-1)
             return action_prob
 
     def act(self, x):
         if self.continuous_action:
             action_mean = self.forward(x)
-            # cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
-            dist = Normal(action_mean, self.action_var)
-            action_logits = action_mean
+            action_var = self.action_var.expand_as(action_mean)
+            dist = Normal(action_mean, action_var)
+            action = dist.sample()
+            action_logprob = dist.log_prob(action.reshape(-1, self.action_dim))
+            # action_logits = None
         else:
             action_probs = self.forward(x)
+            # try:
             dist = Categorical(action_probs)
-            action_logits = action_probs
-
-        action = dist.sample()
-        action_logprob = dist.log_prob(action)
+            # except:
+            #     import ipdb
+            #     ipdb.set_trace()
+            action = dist.sample()
+            action_logprob = dist.log_prob(action.reshape(-1, 1))
+            # action_logits = action_probs
 
         # TODO: Check detach
-        return action.detach(), action_logprob.detach(), action_logits.detach()
+        return action, action_logprob
+
+    def set_action_std(self, new_action_var):
+        if self.continuous_action:
+            self.action_var = torch.full((self.action_dim,), new_action_var).to(self.device)
+    
+    def decay_action_std(self, action_std_decay_rate, min_action_std):
+        if self.continuous_action:
+            self.action_std = self.action_std - action_std_decay_rate
+            self.action_std = round(self.action_std, 4)
+            if (self.action_std <= min_action_std):
+                self.action_std = min_action_std
+                print("setting actor output action_std to min_action_std : ", self.action_std)
+            else:
+                print("setting actor output action_std to : ", self.action_std)
+            self.set_action_std(self.action_std)
 
 
 class Critic(nn.Module):
     def __init__(self, state_dim):
         super(Critic, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_dim, 128),
+            nn.Linear(state_dim, 64),
             nn.LeakyReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(64, 64),
             nn.LeakyReLU(),
-            nn.Linear(128, 1),
+            nn.Linear(64, 1),
         )
 
     def forward(self, x):
@@ -132,16 +155,19 @@ class PPOAgent:
 
         self.continuous_action = continuous_action
         state_dim = env.observation_space.shape[0]
+        # import ipdb
+        # ipdb.set_trace()
         if continuous_action:
-            action_dim = 1
+            action_dim = env.action_space.shape[0]
         else:
             action_dim = env.action_space.n
-        self.actor = Actor(state_dim, action_dim, continuous_action).to(device)
+        self.action_dim = action_dim
+        self.actor = Actor(state_dim, action_dim, continuous_action, device=device).to(device)
         self.critic = Critic(state_dim).to(device)
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr_actor)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=lr_critic)
 
-        self.actor_old = Actor(state_dim, action_dim, continuous_action).to(device)
+        self.actor_old = Actor(state_dim, action_dim, continuous_action, device=device).to(device)
         self.actor_old.load_state_dict(self.actor.state_dict())
 
     def put_data(self, *transtion):
@@ -154,12 +180,15 @@ class PPOAgent:
             clip_grad_norm(p, 10)
 
     def update(self):
-        s, a, r, s_next, prob_a, done_mask = self.buffer.get_batch()
-        s, a = torch.tensor(s, dtype=torch.float).to(self.device), torch.tensor(a).to(self.device)
-        r, s_next = torch.tensor(r).to(self.device), torch.tensor(s_next, dtype=torch.float).to(self.device)
-        prob_a, done_mask = torch.tensor(prob_a).to(self.device), torch.tensor(done_mask).to(self.device)
+        s, a, r, s_next, logprob_a, done_mask = self.buffer.get_batch()
+        s, a = torch.tensor(np.array(s), dtype=torch.float).to(self.device), torch.tensor(np.array(a)).to(self.device)
+        r, s_next = torch.tensor(np.array(r)).to(self.device), torch.tensor(np.array(s_next), dtype=torch.float).to(self.device)
+        logprob_a, done_mask = torch.tensor(np.array(logprob_a)).to(self.device), torch.tensor(np.array(done_mask)).to(self.device)
         actor_loss_sum = 0
         critic_loss_sum = 0
+        # import ipdb
+        # ipdb.set_trace()
+
         for i in range(self.K_epochs):
             # use td_target instead of MC to update the critic net
             td_target = r + self.gamma * self.critic(s_next) * done_mask
@@ -171,13 +200,18 @@ class PPOAgent:
                 advantage_lst.append([advantage])
             advantage_lst.reverse()
             advantage = torch.tensor(advantage_lst, dtype=torch.float).to(self.device)
-
-            pi = self.actor(s)
+            if advantage.shape[1] > 1:
+                advantage = (advantage - advantage.mean()) / ((advantage.std()+1e-4))
             if self.continuous_action:
-                ratio = pi / (prob_a + 1e-5)
+                action_mean = self.actor(s)
+                action_var = self.actor.action_var.expand_as(action_mean)
+                dist = Normal(action_mean, action_var)
+                pi_a = dist.log_prob(a.reshape(-1, self.action_dim))
+                ratio = torch.exp(pi_a - logprob_a)  # a/b == exp(log(a)-log(b))
             else:
+                pi = self.actor(s)
                 pi_a = pi.gather(1, a)
-                ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
+                ratio = torch.exp(torch.log(pi_a) - logprob_a)  # a/b == exp(log(a)-log(b))
 
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1 - self.eps_clip, 1 + self.eps_clip) * advantage
@@ -186,6 +220,13 @@ class PPOAgent:
             actor_loss = -torch.min(surr1, surr2).mean()
             # print('actor_loss', actor_loss)
             loss = actor_loss + critic_loss
+
+            # try: 
+            #     assert(loss == loss)
+            # except:
+            #     import ipdb
+            #     ipdb.set_trace()
+            
             actor_loss_sum += actor_loss.item()
             critic_loss_sum += critic_loss.item()
             # check for anomaly
@@ -216,18 +257,16 @@ class PPOAgent:
             while not done:
                 for i in range(update_interval):
                     total_timestep += 1
-                    # prob = self.actor_old(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
-                    # # print(prob)
-                    # m = Categorical(prob)
-                    # a = m.sample().item()
-                    a, _, prob = self.actor_old.act(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
-
-                    s_next, r, done, info = self.env.step(a)
-                    self.env.render()
+                    a, logprob = self.actor_old.act(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
+                    a = a.cpu().item()
                     if self.continuous_action:
-                        self.put_data(*(s, a, r/100, s_next, prob[0].item(), done))
+                        s_next, r, done, info = self.env.step(np.array([a]))
+                        s_next = s_next.squeeze()  # in case s not 1-dimension                        
                     else:
-                        self.put_data(*(s, a, r/100, s_next, prob[0][a].item(), done))
+                        s_next, r, done, info = self.env.step(a)
+                    # print(a)
+
+                    self.put_data(*(s, a, r, s_next, logprob[0].item(), done))
                     s = s_next
                     score += r
                     if total_timestep % render_interval == 0:
@@ -259,11 +298,18 @@ class PPOAgent:
                 if render:
                     self.env.render()
                 with torch.no_grad():
-                    prob = self.actor_old(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
+                    # if self.continuous_action:
+                    a, logprob = self.actor_old.act(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
+                    # prob = self.actor_old.act(torch.tensor(np.array([s]), dtype=torch.float).to(self.device))
                     # m = Categorical(prob)
                     # a = m.sample().item()
-                    a = torch.argmax(prob).item()
+                    # a = torch.argmax(prob).item()
+                    if self.continuous_action:
+                        a = a.cpu().numpy()
+                    else:
+                        a = a.cpu().item()
                     s_next, r, done, info = self.env.step(a)
+                    s_next = s_next.squeeze()  # in case s not 1-dimension
                     score += r
                     s = s_next
         scores.append(score)
@@ -299,7 +345,7 @@ class PPOAgent:
         self.critic.load_state_dict(state_dict_critic)
 
 
-def main():
+def main_discrete():
     # env = gym.make('MountainCar-v0').unwrapped
     env = gym.make('CartPole-v0')
     model = PPOAgent(env=env, lr_actor=0.001, lr_critic=0.001, gamma=0.99, K_epochs=3,
@@ -310,38 +356,31 @@ def main():
     episode_num = 1000
 
     model.train(episode_num=episode_num, update_interval=20, render_interval=2000, save_interval=3000)
+    env.close()
 
-    for n_epi in range(10000):
-        s = env.reset()
-        done = False
-        i = 0
-        while not done:
-            for t in range(T_horizon):
-                i += 1
-                prob = model.actor_old(torch.tensor([s], dtype=torch.float).to(model.device))
-                m = Categorical(prob)
-                a = m.sample().item()
-                s_prime, r, done, info = env.step(a)
-                model.put_data(*(s, a, r/100, s_prime, prob[0][a].item(), done))
-                s = s_prime
-                score += r
-                # if done or i == 20000:
-                if done:
-                    # print(f'done_{i}_{r}')
-                    # done = True
-                    # i = 0
-                    break
 
-            model.update()
+def main_continuous():
+    # env = gym.make('MountainCar-v0').unwrapped
+    # env = gym.make('CartPole-v0')
+    env = gym.make('Pendulum-v0')
+    model = PPOAgent(env=env, lr_actor=0.001, lr_critic=0.001, gamma=0.99, K_epochs=3,
+                     eps_clip=0.1, continuous_action=True)
+    score = 0.0
+    print_interval = 20
+    T_horizon = 20
+    episode_num = 1000
 
-        if n_epi % print_interval == 0 and n_epi != 0:
-            print("# of episode :{}, avg score : {:.1f}".format(n_epi, score / print_interval))
-            # if score / print_interval > -1000:
-            #     env = gym.make('MountainCar-v0')
-            score = 0.0
-
+    model.train(episode_num=episode_num, update_interval=20, render_interval=2000, save_interval=3000)
     env.close()
 
 
 if __name__ == '__main__':
-    main()
+    main_continuous()
+
+    ### test actor
+    
+    # device = torch.device('cuda:0')
+    # actor = Actor(state_dim=2, action_dim=2, device=device, action_var_init=0.1, continuous_action=True).to(device)
+    # fake_s = torch.ones((2)).to(device)
+    # a, logprob, _ = actor.act(fake_s)
+

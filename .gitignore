@@ -11,3 +11,5 @@ docs/_build/
 flycheck_*
 *.mp4
 **/mlruns
+**/model
+**/runs

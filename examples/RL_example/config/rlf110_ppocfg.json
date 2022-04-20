@@ -1,6 +1,6 @@
 {
     "task_name": "ppo",
-    "result_dir": "/home/mlab/zhijunz/f1tenth_rl/examples/RL_example/result/ppo",
-    "log_dir": "/home/mlab/zhijunz/f1tenth_rl/examples/RL_example/result/ppo/logs",
-    "model_dir": "/home/mlab/zhijunz/f1tenth_rl/examples/RL_example/result/ppo/models"
+    "result_dir": "/home/zzjun/Documents/f1tenth_rl/examples/RL_example/result/ppo",
+    "log_dir": "/home/zzjun/Documents/f1tenth_rl/examples/RL_example/result/ppo/logs",
+    "model_dir": "/home/zzjun/Documents/f1tenth_rl/examples/RL_example/result/ppo/models"
 }
