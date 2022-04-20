@@ -261,7 +261,8 @@ class F110Env_Continuous_Action(F110Env_RL):
     def get_action(self, action) -> np.ndarray:
         # if type(action) != int:
         #     return action.reshape(1, -1)
-        steer = np.clip(action, a_min=-1, a_max=1)[0]
+        # steer = np.clip(action, a_min=-1, a_max=1)[0]
+        steer = np.clip(action, a_min=-1, a_max=1)
         action = np.array([steer, self.speed])
         return action.reshape(1, -1)
 
@@ -380,6 +381,6 @@ def test_env(debug=False):
 
 
 if __name__ == '__main__':
-    wp_manager = Waypoints_Manager(wp_path='./new_wp.csv', save_wp=False, load_wp=True)
-    wp_manager.draw_wp()
-    # test_env()
+    # wp_manager = Waypoints_Manager(wp_path='./new_wp.csv', save_wp=False, load_wp=True)
+    # wp_manager.draw_wp()
+    test_env(debug=True)
