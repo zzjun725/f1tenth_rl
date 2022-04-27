@@ -23,7 +23,7 @@ from time import strftime, gmtime
 
 
 def create_f110env(no_terminal=False, env_time_limit=100000, env_action_repeat=1,
-                   mapfile='./config_example_map.yaml', render=False, continuous_action=False):
+                   mapfile='./config_example_map.yaml', render=False, continuous_action=False, display_lidar=False):
     with open(mapfile) as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
@@ -33,7 +33,8 @@ def create_f110env(no_terminal=False, env_time_limit=100000, env_action_repeat=1
                                         no_terminal=no_terminal,
                                         time_limit=env_time_limit,
                                         dictObs=True,
-                                        limited_time=limited_time)
+                                        limited_time=limited_time,
+                                        display_lidar=display_lidar)
     else:
         env = F110Env_Discrete_Action(conf=conf,
                                       no_terminal=no_terminal,
@@ -100,11 +101,102 @@ class Waypoints_Manager:
         x, y, theta = raw_obs['poses_x'][ego_idx], raw_obs['poses_y'][ego_idx], raw_obs['poses_theta'][ego_idx]
         self.log.write('%f, %f, %f\n' % (x, y, theta))
 
+class Lidar_Manager:
+    def __init__(self, window_W=1080+250, window_H=250, scanScale=10):
+        """
+        Include the code of displays the Lidar scan and reconstruction using cv2
+        """
+        self.map_size = window_H
+        self.map = np.zeros((self.map_size, self.map_size))
+
+        self.lidar_dmin = 0
+        self.lidar_dmax = 30
+        self.angle_min = -135
+        self.angle_max = 135
+        self.x_min, self.x_max = -30, 30
+        self.y_min, self.y_max = -30, 30
+        self.resolution = 0.25
+        self.interpolate_or_not = False
+
+        # windows
+        self.scanScale = scanScale
+        self.window_H = window_H
+        self.window_W = window_W
+        self.lidar_scanPic = np.zeros((self.window_H, 1080, 3), np.uint8)
+        self.lidar_reconstructPic = np.zeros((self.map_size, self.map_size, 3), np.uint8)
+        # import ipdb;ipdb.set_trace()
+        self.lidar_window = np.hstack([self.lidar_scanPic, self.lidar_reconstructPic])
+        print(f'lidar_window shape{self.lidar_window.shape}')
+
+    def rays2world(self, distance):
+		# convert lidar scan distance to 2d locations in space
+        angles = np.linspace(self.angle_min, self.angle_max, self.dimension) * np.pi / 180
+        x = distance * np.cos(angles)
+        y = distance * np.sin(angles)
+        return x, y
+
+    def grid_cell_from_xy(self, x, y):
+		# convert 2d locations in space to 2d array coordinates
+        x = np.clip(x, self.x_min, self.x_max)
+        y = np.clip(y, self.y_min, self.y_max)
+
+        cell_indices = np.zeros((2, x.shape[0]), dtype='int')
+        cell_indices[0, :] = np.floor((x - self.x_min) / self.resolution)
+        cell_indices[1, :] = np.floor((y - self.y_min) / self.resolution)
+        return cell_indices
+
+    def interpolate(self, cell_indices):
+        for i in range(cell_indices.shape[1] - 1):
+            fill_x = np.linspace(cell_indices[1, i], cell_indices[1, i+1], endpoint=False, dtype='int')
+            fill_y = np.linspace(cell_indices[0, i], cell_indices[0, i+1], endpoint=False, dtype='int')
+            self.map[fill_x, fill_y] = 1
+
+    def update_scan2map(self, lidar_1d):
+        self.map = np.zeros((self.map_size, self.map_size))
+        self.lidar_reconstructPic = np.zeros((self.map_size, self.map_size, 3), np.uint8)
+
+        self.distance = lidar_1d
+        self.dimension = len(self.distance)
+
+        x, y = self.rays2world(self.distance)
+        cell_indices = self.grid_cell_from_xy(x, y)
+        self.map[cell_indices[1, :], cell_indices[0, :]] = 1
+
+        if self.interpolate_or_not:
+        	self.interpolate(cell_indices[:, :])
+        
+        cell_indices_line = np.vstack([cell_indices[0,:], cell_indices[1, :]]).T
+        cv2.polylines(self.lidar_reconstructPic, [cell_indices_line], False, (0, 0, 255), 5)
+        # self.lidar_reconstructPic[:, :, 2][np.nonzero(self.map)[0], np.nonzero(self.map)[1]] = 200
+        # import ipdb; ipdb.set_trace()
+		# plt.imshow(self.map)
+		# plt.show()
+
+    def update_scan(self, best_p_idx=None, scan=None):
+        self.lidar_scanPic = np.zeros((self.window_H, 1080, 3), np.uint8)
+        scan = (scan*self.scanScale).astype(np.int64)
+        scan = np.vstack([np.arange(len(scan)).astype(np.int64), self.window_H-scan]).T
+
+        cv2.polylines(self.lidar_scanPic, [scan], False, (0, 0, 255), 10)
+        if best_p_idx:  
+            target = scan[max(0, best_p_idx-1):best_p_idx + 1, :]     
+            cv2.polylines(self.lidar_scanPic, [target], False, (0, 255, 0), 10)
+
+    
+    def update_lidar_windows(self, wait=1, obs=None, target_idx=None):
+        if 'raw_obs' in obs.keys():
+            obs = obs['raw_obs']
+        scan = obs['scans'][0]
+        self.update_scan2map(scan)
+        self.update_scan(best_p_idx=target_idx, scan=scan)
+        self.lidar_window = np.hstack([self.lidar_scanPic, self.lidar_reconstructPic])
+        cv2.imshow('debug', self.lidar_window)
+        cv2.waitKey(wait)
 
 
 class F110Env_RL:
     def __init__(self, speed=3, obs_shape = 54, conf=None, no_terminal=None, time_limit=10000,
-                 dictObs=False, limited_time=False) -> None:
+                 dictObs=False, limited_time=False, display_lidar=False) -> None:
         self.f110 = F110Env(map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
         self.conf = conf
         self.speed = speed
@@ -115,6 +207,11 @@ class F110Env_RL:
         self.wpManager.load_wp()
         self.waypoints_xytheta = self.wpManager.wp.T
         self.lateral_error_thres = 0.2
+
+        # lidar
+        self.display_lidar = display_lidar 
+        if display_lidar:
+            self.lidarManager = Lidar_Manager()
 
         # for offline data storage
         self.no_terminal = no_terminal
@@ -252,17 +349,20 @@ class F110Env_Discrete_Action(F110Env_RL):
 ########### Bowen Jiang, Added on Apr 17, 2022
 class F110Env_Continuous_Action(F110Env_RL):
     def __init__(self, speed=3, obs_shape = 54, conf=None, no_terminal=None, time_limit=100000,
-                 dictObs=False, limited_time=False):
-        self.action_space = spaces.Box(low=-1, high=1, shape=(1,))      # in radians
-        super().__init__(speed, obs_shape, conf, no_terminal, time_limit, dictObs, limited_time)
+                 dictObs=False, limited_time=False, display_lidar=False):
+        
+        # in radians
+        self.action_space = spaces.Box(low=-1, high=1, shape=(1,))   
+        
+        super().__init__(speed, obs_shape, conf, no_terminal, time_limit, dictObs, limited_time, display_lidar)
         ## TODO: fix this
         self.action_size = 2
         
     def get_action(self, action) -> np.ndarray:
         # if type(action) != int:
         #     return action.reshape(1, -1)
-        # steer = np.clip(action, a_min=-1, a_max=1)[0]
-        steer = np.clip(action, a_min=-1, a_max=1)
+        steer = np.clip(action, a_min=-1, a_max=1)[0]
+        # steer = np.clip(action, a_min=-1, a_max=1)
         action = np.array([steer, self.speed])
         return action.reshape(1, -1)
 
@@ -308,17 +408,12 @@ class F110Env_Continuous_Action(F110Env_RL):
                 info['episode'] = episode
 
         return obs, reward, done, info
-        # return obs, reward, done, info
-
-###########
 
 
 def test_env(debug=False):
-    env = create_f110env(no_terminal=False, env_time_limit=0, render=True, continuous_action=True)
+    env = create_f110env(no_terminal=False, env_time_limit=0, render=True, continuous_action=True, display_lidar=True)
     policy = GapFollowPolicy()
     wp_manager = Waypoints_Manager(save_wp=False)
-    W, H = 1200, 500
-    scan_drawScale = 40
 
     for ep_i in range(5):
         obs = env.reset()
@@ -337,31 +432,16 @@ def test_env(debug=False):
             # action = np.array([steer, speed])
 
             action, metric = policy(obs['raw_obs'])
-            
-            # print(best_p_idx)
-
-            # print(scan.shape)
-            
-            # draw LiDAR
-            if debug:
-                best_p_idx = metric['target_idx']
-                scan = (obs['raw_obs']['scans'][0]*scan_drawScale).astype(np.int64)
-                scan = np.vstack([np.arange(len(scan)).astype(np.int64), 500-scan]).T
-                target = scan[max(0, best_p_idx-10):best_p_idx + 10, :]
-                blank_image = np.ones((H, W, 3), np.uint8)
-                blank_image.fill(0)
-                cv2.polylines(blank_image, [scan], False, (0, 0, 255))           
-                cv2.polylines(blank_image, [target], False, (0, 255, 0))
-                cv2.imshow('debug', blank_image)
-                cv2.waitKey(5)
-
+            target_idx = metric['target_idx']
             # print(action)
             obs, step_reward, done, info = env.step(action[0])
+            if env.display_lidar:
+                env.lidarManager.update_lidar_windows(wait=1, obs=obs, target_idx=target_idx)
             if i % 10 == 0:
                 # print(f'step_reward: {step_reward}')
                 # print(min(obs['vecobs']))
                 # print(env.wpManager.get_lateral_error(obs['raw_obs']))
-                print(step_reward)
+                # print(step_reward)
                 pass
                 
             # if i > 100 and i % 5 == 0:
