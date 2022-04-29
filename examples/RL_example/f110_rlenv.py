@@ -12,7 +12,7 @@ import torch
 from numba import njit
 from pyglet.gl import GL_POINTS
 
-from utils import render_callback
+from utils import path_filler, render_callback
 from torch.distributions import Categorical
 import matplotlib.pyplot as plt
 import random
@@ -20,28 +20,23 @@ from math import pi
 from common.policys import GapFollowPolicy, RandomPolicy
 import cv2
 from time import strftime, gmtime
+import json
+import os
 
-
-def create_f110env(no_terminal=False, env_time_limit=100000, env_action_repeat=1,
-                   mapfile='./config_example_map.yaml', render=False, continuous_action=False, display_lidar=False):
-    with open(mapfile) as file:
+def create_f110env(**kargs):
+    # load simulator config file(define map, waypoints, etc)
+    with open(kargs['sim_cfg_file']) as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
-    conf = Namespace(**conf_dict)
-    limited_time = True if env_time_limit != 0 else False
-    if continuous_action:
-        env = F110Env_Continuous_Action(conf=conf,
-                                        no_terminal=no_terminal,
-                                        time_limit=env_time_limit,
-                                        dictObs=True,
-                                        limited_time=limited_time,
-                                        display_lidar=display_lidar)
+    sim_cfg = Namespace(**conf_dict)
+    
+    # choose continuous/discrete action space
+    if kargs['continuous_action']:
+        env = F110Env_Continuous_Action(sim_cfg=sim_cfg, **kargs)
     else:
-        env = F110Env_Discrete_Action(conf=conf,
-                                      no_terminal=no_terminal,
-                                      time_limit=env_time_limit,
-                                      dictObs=True,
-                                      limited_time=limited_time)
-    if render:
+        env = F110Env_Discrete_Action(sim_cfg=sim_cfg, **kargs)
+    
+    # render option
+    if kargs['render_env']:
         env.f110.add_render_callback(render_callback)
     return env
 
@@ -116,6 +111,7 @@ class Lidar_Manager:
         self.x_min, self.x_max = -30, 30
         self.y_min, self.y_max = -30, 30
         self.resolution = 0.25
+        self.lidar_angles = np.linspace(self.angle_min, self.angle_max, self.dimension) * np.pi / 180
         self.interpolate_or_not = False
 
         # windows
@@ -130,9 +126,8 @@ class Lidar_Manager:
 
     def rays2world(self, distance):
 		# convert lidar scan distance to 2d locations in space
-        angles = np.linspace(self.angle_min, self.angle_max, self.dimension) * np.pi / 180
-        x = distance * np.cos(angles)
-        y = distance * np.sin(angles)
+        x = distance * np.cos(self.lidar_angles)
+        y = distance * np.sin(self.lidar_angles)
         return x, y
 
     def grid_cell_from_xy(self, x, y):
@@ -195,31 +190,29 @@ class Lidar_Manager:
 
 
 class F110Env_RL:
-    def __init__(self, speed=3, obs_shape = 54, conf=None, no_terminal=None, time_limit=10000,
-                 dictObs=False, limited_time=False, display_lidar=False) -> None:
-        self.f110 = F110Env(map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
-        self.conf = conf
-        self.speed = speed
-        self.observation_space = spaces.Box(low=0, high=1000, shape=(obs_shape, 1))
+    def __init__(self, continuous_action=True, sim_cfg=None, **kargs) -> None:
+
+        for key, value in kargs.items():
+            setattr(self, key, value)
+
+        self.f110 = F110Env(map=sim_cfg.map_path, map_ext=sim_cfg.map_ext, num_agents=1)
+        self.conf = sim_cfg
+        self.observation_space = spaces.Box(low=0, high=1000, shape=(self.obs_shape, 1))
+        self.observation_gap = 1080 // self.obs_shape
         
         # waypoints Manager, for lateral error
-        self.wpManager = Waypoints_Manager(conf.wpt_path, save_wp=False, load_wp=True)
+        self.wpManager = Waypoints_Manager(sim_cfg.wpt_path, save_wp=False, load_wp=True)
         self.wpManager.load_wp()
         self.waypoints_xytheta = self.wpManager.wp.T
         self.lateral_error_thres = 0.2
 
         # lidar
-        self.display_lidar = display_lidar 
-        if display_lidar:
+        if self.display_lidar:
             self.lidarManager = Lidar_Manager()
 
         # for offline data storage
-        self.no_terminal = no_terminal
         self.action_size = self.action_space.n if hasattr(self.action_space, 'n') else self.action_space.shape[0]
-        self.time_limit = time_limit
-        self._max_episode_steps = time_limit
-        self.dictObs = dictObs
-        self.limited_time = limited_time
+        # self._max_episode_steps = time_limit
 
         self.episode = []
 
@@ -241,7 +234,7 @@ class F110Env_RL:
             obs['reward'] = np.array(0.0)
             obs['terminal'] = np.array(False)
             obs['reset'] = np.array(True)
-            obs['raw_obs'] = raw_obs
+            # obs['raw_obs'] = raw_obs
             self.episode = [obs.copy()]
 
         # time limit
@@ -250,7 +243,8 @@ class F110Env_RL:
         return obs
     
     def get_obs(self, raw_obs: dict):
-        obs = raw_obs['scans'][0][::20]
+        obs = raw_obs['scans'][0][::self.observation_gap]
+        # print(self.observation_gap)
         if self.dictObs:
             if len(obs.shape) == 1:
                 return {'vecobs': obs}  # Vector env
@@ -287,19 +281,18 @@ class F110Env_RL:
 
 
 class F110Env_Discrete_Action(F110Env_RL):
-    def __init__(self, speed=3, obs_shape = 27, conf=None, no_terminal=None, time_limit=10000,
-                 dictObs=False, limited_time=False):
+    def __init__(self, continuous_action=True, sim_cfg=None, **kargs):
         self.action_space = spaces.Discrete(3)
-        super().__init__(speed, obs_shape, conf, no_terminal, time_limit, dictObs, limited_time)
+        super().__init__(continuous_action, sim_cfg, **kargs)
         # steer, speed
+        for key, value in kargs.items():
+            setattr(self, key, value)
+        
         self.f110_action = np.array([
               # go straight
-            [1, speed],  # go left
-            [-1, speed], # go right
-            [0, speed],
-            # [1, speed/2], # go left and reduce speed
-            # [-1, speed/2],
-            # [0, speed/2]
+            [1, self.speed],  # go left
+            [-1, self.speed], # go right
+            [0, self.speed],
         ])
 
 
@@ -348,31 +341,29 @@ class F110Env_Discrete_Action(F110Env_RL):
 
 ########### Bowen Jiang, Added on Apr 17, 2022
 class F110Env_Continuous_Action(F110Env_RL):
-    def __init__(self, speed=3, obs_shape = 54, conf=None, no_terminal=None, time_limit=100000,
-                 dictObs=False, limited_time=False, display_lidar=False):
-        
-        # in radians
-        self.action_space = spaces.Box(low=-1, high=1, shape=(1,))   
-        
-        super().__init__(speed, obs_shape, conf, no_terminal, time_limit, dictObs, limited_time, display_lidar)
-        ## TODO: fix this
-        self.action_size = 2
+    def __init__(self, continuous_action=True, sim_cfg=None, **kargs):
+        self.action_space = spaces.Box(low=-1, high=1, shape=(1,)) 
+        super().__init__(continuous_action, sim_cfg, **kargs)
+        # steer, speed
+        for key, value in kargs.items():
+            setattr(self, key, value)
+        self.action_size = self.action_space.shape[0]
         
     def get_action(self, action) -> np.ndarray:
         # if type(action) != int:
         #     return action.reshape(1, -1)
-        steer = np.clip(action, a_min=-1, a_max=1)[0]
+        steer = np.clip(action, a_min=-1, a_max=1)
         # steer = np.clip(action, a_min=-1, a_max=1)
         action = np.array([steer, self.speed])
         return action.reshape(1, -1)
 
     def step(self, action):
-        action = self.get_action(action)
+        exe_action = self.get_action(action)
         # import ipdb
         # ipdb.set_trace()
         # print(action)
         # done = False
-        raw_obs, reward, done, info = self.f110.step(action)
+        raw_obs, reward, done, info = self.f110.step(exe_action)
         info = {}
         ##  make 2 step with the same action
         # step = 3
@@ -396,7 +387,7 @@ class F110Env_Continuous_Action(F110Env_RL):
             obs['reward'] = np.array(reward)
             obs['terminal'] = np.array(False if self.no_terminal else done)
             obs['reset'] = np.array(False)
-            obs['raw_obs'] = raw_obs
+            # obs['raw_obs'] = raw_obs
             # import ipdb
             # ipdb.set_trace()
 
@@ -404,6 +395,7 @@ class F110Env_Continuous_Action(F110Env_RL):
             if done:
                 # import ipdb
                 # ipdb.set_trace()
+                # print(self.episode)
                 episode = {k: np.array([t[k] for t in self.episode]) for k in self.episode[0]}
                 info['episode'] = episode
 
@@ -411,7 +403,9 @@ class F110Env_Continuous_Action(F110Env_RL):
 
 
 def test_env(debug=False):
-    env = create_f110env(no_terminal=False, env_time_limit=0, render=True, continuous_action=True, display_lidar=True)
+    env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
+    # import ipdb; ipdb.set_trace()
+    env = create_f110env(**env_cfg)
     policy = GapFollowPolicy()
     wp_manager = Waypoints_Manager(save_wp=False)
 
@@ -431,10 +425,14 @@ def test_env(debug=False):
             # action = env.action_space.sample()
             # action = np.array([steer, speed])
 
-            action, metric = policy(obs['raw_obs'])
-            target_idx = metric['target_idx']
+            ##### use policy ######
+            # action, metric = policy(obs['raw_obs'])
+            # target_idx = metric['target_idx']
             # print(action)
-            obs, step_reward, done, info = env.step(action[0])
+            # obs, step_reward, done, info = env.step(action[0])
+
+            ##### random #######
+            obs, step_reward, done, info = env.step(0)
             if env.display_lidar:
                 env.lidarManager.update_lidar_windows(wait=1, obs=obs, target_idx=target_idx)
             if i % 10 == 0:

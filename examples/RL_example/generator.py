@@ -70,9 +70,21 @@ def main(env_id='MiniGrid-MazeS11N-v0',
     info(f'Found existing {nfiles} files, {episodes} episodes, {steps} steps in {repository}')
 
     # Env
+    env_cfg = {
+        "speed": 3,
+        "obs_shape": 108,
+        "continuous_action": True,
+        "sim_cfg_file": "/home/zzjun/Documents/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml",
+        "limited_time": False,
+        "no_terminal": False,
+        "env_time_limit": 0,
+        "env_action_repeat": 1,
+        "render_env": True,
+        "display_lidar": False,
+        "dictObs": True       
+    }
 
-    # env = create_env(env_id, env_no_terminal, env_time_limit, env_action_repeat)
-    env = create_f110env(env_no_terminal, env_time_limit, env_action_repeat, render=False)
+    env = create_f110env(**env_cfg)
     # Policy
 
     model = None
@@ -92,7 +104,7 @@ def main(env_id='MiniGrid-MazeS11N-v0',
 
     elif policy == 'random':
         policy = RandomPolicy(env.action_space)
-    elif policy == 'pure_pursuit':
+    elif policy == 'gap_follow':
         # TODO: implement pure_pursuit
         pass
     else:

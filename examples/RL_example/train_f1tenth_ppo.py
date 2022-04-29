@@ -24,11 +24,11 @@ conf = Namespace(**conf_dict)
 
 continuous_action = True
 if continuous_action:
-    env = F110Env_Continuous_Action(conf=conf, dictObs=False)
-    eval_env = F110Env_Continuous_Action(conf=conf, dictObs=False)
+    env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
+    eval_env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
 else:
-    env = F110Env_Discrete_Action(conf=conf, dictObs=False)
-    eval_env = F110Env_Continuous_Action(conf=conf, dictObs=False)
+    env = F110Env_Discrete_Action(sim_cfg=conf, dictObs=False)
+    eval_env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
 print('continuous_action', continuous_action)
 env.f110.add_render_callback(render_callback)
 

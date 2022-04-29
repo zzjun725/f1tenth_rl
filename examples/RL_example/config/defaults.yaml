@@ -199,9 +199,10 @@ vectorenv:
 
 f110env:
   env_id: F110Env
-  action_dim: 3
-  vecobs_size: 27
-  env_time_limit: 1000
+  action_dim: 1
+  vecobs_size: 108
+  env_time_limit: 100000
+  actor_dist: normal_tanh
   image_key:
   image_encoder:
   image_decoder:

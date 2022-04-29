@@ -10,7 +10,7 @@ from baselineAgents.d3qn_agent import D3QNAgent
 with open('./config_example_map.yaml') as file:
     conf_dict = yaml.load(file, Loader=yaml.FullLoader)
 conf = Namespace(**conf_dict)
-env = F110Env_Discrete_Action(conf=conf)
+env = F110Env_Discrete_Action(sim_cfg=conf)
 env.f110.add_render_callback(render_callback)
 
 # train

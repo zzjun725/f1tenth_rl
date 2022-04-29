@@ -1,0 +1,13 @@
+{
+    "speed": 3,
+    "obs_shape": 54,
+    "continuous_action": true,
+    "sim_cfg_file": "/home/zzjun/Documents/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml",
+    "limited_time": false,
+    "no_terminal": false,
+    "env_time_limit": 0,
+    "env_action_repeat": 1,
+    "render_env": true,
+    "display_lidar": false,
+    "dictObs": true
+}

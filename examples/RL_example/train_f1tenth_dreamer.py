@@ -202,7 +202,7 @@ def run(conf):
                 # Make batch
 
                 with timer('data'):
-
+                    
                     batch, wid = next(data_iter)
                     obs: Dict[str, Tensor] = map_structure(batch, lambda x: x.to(device))  # type: ignore
 

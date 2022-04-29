@@ -57,5 +57,5 @@ class NetworkPolicy:
 
         action = action.squeeze()  # (1,1,A) => A
         # add as type to adjust to the f110RL env
-        return action.numpy().astype(np.int64), metrics
-
+        # return action.numpy().astype(np.int64), metrics
+        return action.numpy(), metrics
