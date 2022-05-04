@@ -38,4 +38,11 @@ Including the implementation of all the baseline agents such as ppo(for both con
 
 Including all the models for evaluation.
 
+- **pydreamer**
 
+This part of code is refered to [pydreamer](https://github.com/jurgisp/pydreamer)
+
+- **Contributions**
+Bowen Jiang: PPO with continuous action space, LiDAR distance reconstruction
+Zhiyang Chen: DQN with discrete action space, reward design and expert training data collection
+Zhijun Zhuang: PPO with discrete action space, Dreamer(only training and evaluation part)
