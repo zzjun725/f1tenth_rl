@@ -44,8 +44,8 @@ This part of code is refered to [pydreamer](https://github.com/jurgisp/pydreamer
 
 # Contributions
 
-Bowen Jiang: PPO with continuous action space, LiDAR distance reconstruction
+Bowen Jiang: PPO with continuous action space, LiDAR distance reconstruction, environment design
 
 Zhiyang Chen: DQN with discrete action space, reward design and expert training data collection
 
-Zhijun Zhuang: PPO with discrete action space, Dreamer(only training and evaluation part)
+Zhijun Zhuang: PPO with discrete action space, Dreamer(only training and evaluation part), environment design
