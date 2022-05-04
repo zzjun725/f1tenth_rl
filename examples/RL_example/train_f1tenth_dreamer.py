@@ -76,7 +76,8 @@ def run(conf):
 
         if conf.n_env_steps // conf.env_action_repeat <= conf.generator_prefill_steps:
             # This is a legit case when generating offline data - it's a prefill-only job
-            info(f'Requested {conf.n_env_steps} steps, prefilled {conf.generator_prefill_steps} x{conf.env_action_repeat} - DONE')
+            info(
+                f'Requested {conf.n_env_steps} steps, prefilled {conf.generator_prefill_steps} x{conf.env_action_repeat} - DONE')
             return
 
         # Agents
@@ -91,7 +92,8 @@ def run(conf):
                                   conf,
                                   save_uri=f'{artifact_uri}/episodes/{i}',
                                   save_uri2=f'{artifact_uri}/episodes_eval/{i}',
-                                  num_steps=(conf.n_env_steps // conf.env_action_repeat - conf.generator_prefill_steps) // conf.generator_workers,
+                                  num_steps=(
+                                                        conf.n_env_steps // conf.env_action_repeat - conf.generator_prefill_steps) // conf.generator_workers,
                                   limit_step_ratio=conf.limit_step_ratio // conf.generator_workers,
                                   worker_id=i,
                                   policy='network',
@@ -103,7 +105,8 @@ def run(conf):
                 p = run_generator(conf.env_id,
                                   conf,
                                   f'{artifact_uri}/episodes/{i}',
-                                  num_steps=(conf.n_env_steps // conf.env_action_repeat - conf.generator_prefill_steps) // conf.generator_workers,
+                                  num_steps=(
+                                                        conf.n_env_steps // conf.env_action_repeat - conf.generator_prefill_steps) // conf.generator_workers,
                                   limit_step_ratio=conf.limit_step_ratio // conf.generator_workers,
                                   worker_id=i,
                                   policy='network')
@@ -188,7 +191,8 @@ def run(conf):
     data_iter = iter(DataLoader(WorkerInfoPreprocess(preprocess(data)),
                                 batch_size=None,
                                 num_workers=conf.data_workers,
-                                prefetch_factor=20 if conf.data_workers else 2,  # GCS download has to be shorter than this many batches (e.g. 1sec < 20*300ms)
+                                prefetch_factor=20 if conf.data_workers else 2,
+                                # GCS download has to be shorter than this many batches (e.g. 1sec < 20*300ms)
                                 pin_memory=True))
 
     scaler = GradScaler(enabled=conf.amp)
@@ -202,7 +206,6 @@ def run(conf):
                 # Make batch
 
                 with timer('data'):
-                    
                     batch, wid = next(data_iter)
                     obs: Dict[str, Tensor] = map_structure(batch, lambda x: x.to(device))  # type: ignore
 
@@ -210,14 +213,14 @@ def run(conf):
 
                 with timer('forward'):
                     with autocast(enabled=conf.amp):
-
                         state = states.get(wid) or model.init_state(conf.batch_size * conf.iwae_samples)
                         losses, new_state, loss_metrics, tensors, dream_tensors = \
                             model.training_step(obs,
                                                 state,
                                                 iwae_samples=conf.iwae_samples,
                                                 imag_horizon=conf.imag_horizon,
-                                                do_image_pred=steps % conf.log_interval >= int(conf.log_interval * 0.9),  # 10% of batches
+                                                do_image_pred=steps % conf.log_interval >= int(conf.log_interval * 0.9),
+                                                # 10% of batches
                                                 do_dream_tensors=steps % conf.logbatch_interval == 1)
                         if conf.keep_state:
                             states[wid] = new_state
@@ -269,7 +272,8 @@ def run(conf):
 
                     if steps % conf.logbatch_interval == 0:
                         repository = MlflowEpisodeRepository(input_dirs)
-                        data_train = DataSequential(repository, conf.batch_length, conf.batch_size, buffer_size=conf.buffer_size)
+                        data_train = DataSequential(repository, conf.batch_length, conf.batch_size,
+                                                    buffer_size=conf.buffer_size)
                         metrics['data_steps'].append(data_train.stats_steps)
                         metrics['data_env_steps'].append(data_train.stats_steps * conf.env_action_repeat)
 
@@ -291,8 +295,8 @@ def run(conf):
                         info(f"[{steps:06}]"
                              f"  loss_model: {metrics.get('train/loss_model', 0):.3f}"
                              f"  loss_critic: {metrics.get('train/loss_critic', 0):.3f}"
-                             f"  policy_value: {metrics.get('train/policy_value',0):.3f}"
-                             f"  policy_entropy: {metrics.get('train/policy_entropy',0):.3f}"
+                             f"  policy_value: {metrics.get('train/policy_value', 0):.3f}"
+                             f"  policy_entropy: {metrics.get('train/policy_entropy', 0):.3f}"
                              f"  fps: {metrics['train/fps']:.3f}"
                              )
                         if steps > conf.log_interval:  # Skip the first batch, because the losses are very high and mess up y axis
@@ -332,15 +336,19 @@ def run(conf):
                         try:
                             # Test = same settings as train
                             repository = MlflowEpisodeRepository(test_dirs)
-                            data_test = DataSequential(repository, conf.batch_length, conf.test_batch_size, skip_first=False, reset_interval=conf.reset_interval)
+                            data_test = DataSequential(repository, conf.batch_length, conf.test_batch_size,
+                                                       skip_first=False, reset_interval=conf.reset_interval)
                             test_iter = iter(DataLoader(preprocess(data_test), batch_size=None))
-                            evaluate('test', steps, model, test_iter, device, conf.test_batches, conf.iwae_samples, conf.keep_state, conf)
+                            evaluate('test', steps, model, test_iter, device, conf.test_batches, conf.iwae_samples,
+                                     conf.keep_state, conf)
 
                             # Eval = no state reset, multisampling
                             repository = MlflowEpisodeRepository(eval_dirs)
-                            data_eval = DataSequential(repository, conf.batch_length, conf.eval_batch_size, skip_first=False)
+                            data_eval = DataSequential(repository, conf.batch_length, conf.eval_batch_size,
+                                                       skip_first=False)
                             eval_iter = iter(DataLoader(preprocess(data_eval), batch_size=None))
-                            evaluate('eval', steps, model, eval_iter, device, conf.eval_batches, conf.eval_samples, True, conf)
+                            evaluate('eval', steps, model, eval_iter, device, conf.eval_batches, conf.eval_samples,
+                                     True, conf)
 
                         except Exception as e:
                             # This catch is useful if there is no eval data generated yet
@@ -370,7 +378,6 @@ def evaluate(prefix: str,
              eval_samples: int,
              keep_state: bool,
              conf):
-
     start_time = time.time()
     metrics_eval = defaultdict(list)
     state = None
@@ -417,7 +424,8 @@ def evaluate(prefix: str,
 
                     if np.random.rand() < 0.10:  # Save a small sample of batches
                         r = obs['reward'].sum().item()
-                        log_batch_npz(batch, tensors_im, f'{steps:07}_{i_batch}_r{r:.0f}.npz', subdir=f'd2_wm_open_{prefix}')
+                        log_batch_npz(batch, tensors_im, f'{steps:07}_{i_batch}_r{r:.0f}.npz',
+                                      subdir=f'd2_wm_open_{prefix}')
 
                     mask = (~reset_episodes).float()
                     for key, logprobs in tensors_im.items():
@@ -458,17 +466,18 @@ def evaluate(prefix: str,
 
     if len(npz_datas) > 0:
         npz_data = {k: np.concatenate([d[k] for d in npz_datas], 1) for k in npz_datas[0]}
-        print_once(f'Saving batch d2_wm_closed_{prefix}: ', {k: tuple(v.shape) for k, v in npz_data.items()})  # type: ignore
+        print_once(f'Saving batch d2_wm_closed_{prefix}: ',
+                   {k: tuple(v.shape) for k, v in npz_data.items()})  # type: ignore
         tools.mlflow_log_npz(npz_data, f'{steps:07}.npz', subdir=f'd2_wm_closed_{prefix}', verbose=True)
 
-    info(f'Evaluation ({prefix}): done in {(time.time()-start_time):.0f} sec, recorded {n_finished_episodes.sum()} episodes')
+    info(
+        f'Evaluation ({prefix}): done in {(time.time() - start_time):.0f} sec, recorded {n_finished_episodes.sum()} episodes')
 
 
 def log_batch_npz(batch: Dict[str, Tensor],
                   tensors: Dict[str, Tensor],
                   filename: str,
                   subdir: str):
-
     data = dict(**batch, **tensors)
     print_once(f'Saving batch {subdir} (input): ', {k: tuple(v.shape) for k, v in data.items()})
     data = prepare_batch_npz(data)
@@ -477,7 +486,6 @@ def log_batch_npz(batch: Dict[str, Tensor],
 
 
 def prepare_batch_npz(data: Dict[str, Tensor], take_b=999):
-
     def unpreprocess(key: str, val: Tensor) -> np.ndarray:
         if take_b < val.shape[1]:
             val = val[:, :take_b]
@@ -583,13 +591,13 @@ if __name__ == '__main__':
     conf = {}
     configs = tools.read_yamls('./config')
     # for name in args.configs:
-    name = 'defaults,f110env'
+    name = 'defaults,lidar'
     if ',' in name:
         for n in name.split(','):
             conf.update(configs[n])
     else:
         conf.update(configs[name])
-    conf['run_name'] = 'f110env'
+    conf['run_name'] = 'lidar'
     # Override config from command-line
     # parser = argparse.ArgumentParser()
     for key, value in conf.items():

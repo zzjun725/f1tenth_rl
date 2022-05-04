@@ -31,7 +31,9 @@ def create_f110env(**kargs):
     sim_cfg = Namespace(**conf_dict)
 
     # choose continuous/discrete action space
-    if kargs['continuous_action']:
+    if kargs['lidar_action']:
+        env = F110Env_LiDAR_Action(sim_cfg=sim_cfg, **kargs)
+    elif kargs['continuous_action']:
         env = F110Env_Continuous_Action(sim_cfg=sim_cfg, **kargs)
     else:
         env = F110Env_Discrete_Action(sim_cfg=sim_cfg, **kargs)
@@ -110,10 +112,11 @@ class Waypoints_Manager:
 
 
 class Lidar_Manager:
-    def __init__(self, scan_dim=108, window_H=250, scanScale=10, xy_range=30):
+    def __init__(self, scan_dim=108, window_H=250, scanScale=10, xy_range=30, display_lidar=False):
         """
         Include the code of displays the Lidar scan and reconstruction using cv2
         """
+        self.display_lidar = display_lidar
         window_W = scan_dim + window_H
         self.obs_gap = int(1080/scan_dim)
         self.scan_dim = scan_dim
@@ -184,7 +187,8 @@ class Lidar_Manager:
             self.interpolate(cell_indices[:, :])
 
         cell_indices_line = np.vstack([cell_indices[0, :], cell_indices[1, :]]).T
-        cv2.polylines(self.lidar_reconstructPic, [cell_indices_line], False, color_tuple, 2)
+        if self.display_lidar:
+            cv2.polylines(self.lidar_reconstructPic, [cell_indices_line], False, color_tuple, 2)
         return self.lidar_reconstructPic
         # self.lidar_reconstructPic[:, :, 2][np.nonzero(self.map)[0], np.nonzero(self.map)[1]] = 200
         # import ipdb; ipdb.set_trace()
@@ -196,6 +200,7 @@ class Lidar_Manager:
         self.lidar_scanPic = np.zeros((self.window_H, self.scan_dim, 3), np.uint8)
         scan = (scan * self.scanScale).astype(np.int64)
         scan = np.vstack([np.arange(len(scan)).astype(np.int64), self.window_H - scan]).T
+
 
         cv2.polylines(self.lidar_scanPic, [scan], False, (0, 0, 255), 2)
         if best_p_idx:
@@ -210,15 +215,17 @@ class Lidar_Manager:
         # scan = obs['scans'][0]
         self.update_scan2map(scan)
         self.update_scan(best_p_idx=target_idx, scan=scan)
-        self.lidar_window = np.hstack([self.lidar_scanPic, self.lidar_reconstructPic])
-        cv2.imshow('debug', self.lidar_window)
-        cv2.waitKey(wait)
 
+        if self.display_lidar:
+            self.lidar_window = np.hstack([self.lidar_scanPic, self.lidar_reconstructPic])
+            cv2.imshow('debug', self.lidar_window)
+            cv2.waitKey(wait)
 
 class F110Env_RL:
     def __init__(self, continuous_action=True, sim_cfg=None, **kargs) -> None:
 
         for key, value in kargs.items():
+            # print(key)
             setattr(self, key, value)
 
         self.f110 = F110Env(map=sim_cfg.map_path, map_ext=sim_cfg.map_ext, num_agents=1)
@@ -233,8 +240,7 @@ class F110Env_RL:
         self.lateral_error_thres = 0.2
 
         # lidar
-        if self.display_lidar:
-            self.lidarManager = Lidar_Manager(scan_dim=self.obs_shape)
+        self.lidarManager = Lidar_Manager(scan_dim=self.obs_shape, display_lidar=self.display_lidar)
 
         # for offline data storage
         self.action_size = self.action_space.n if hasattr(self.action_space, 'n') else self.action_space.shape[0]
@@ -440,10 +446,114 @@ class F110Env_Continuous_Action(F110Env_RL):
         return obs, reward, done, info
 
 
+class F110Env_LiDAR_Action(F110Env_RL):
+    def __init__(self, continuous_action=True, sim_cfg=None, **kargs):
+        self.action_space = spaces.Box(low=-1, high=1, shape=(1,))
+        super().__init__(continuous_action, sim_cfg, **kargs)
+        # steer, speed
+        for key, value in kargs.items():
+            setattr(self, key, value)
+        self.action_size = self.action_space.shape[0]
+
+    def get_action(self, action) -> np.ndarray:
+        # if type(action) != int:
+        #     return action.reshape(1, -1)
+        # try:
+        if type(action) == np.ndarray:
+            action = action[0]
+        # except:
+        #     print('no valid steer')
+        #     print(action)
+        #     action = 0.0
+        steer = np.clip(action, a_min=-1, a_max=1)
+        # import ipdb; ipdb.set_trace()
+        # steer = np.clip(action, a_min=-1, a_max=1)
+        action = np.array([steer, self.speed]).astype(np.float32)
+        return action.reshape(1, -1)
+
+    def step(self, action):
+        exe_action = self.get_action(action)
+        # import ipdb
+        # ipdb.set_trace()
+        # print(action)
+        # done = False
+        raw_obs, reward, done, info = self.f110.step(exe_action)
+        info = {}
+        ##  make 2 step with the same action
+        # step = 3
+        # while not done and step > 0:
+        #     raw_obs, reward, done, info = self.f110.step(action)
+        #     step -= 1
+        ##  give penalty for hitting the wall
+        obs = {}
+        reward = self.get_reward(raw_obs, done)
+
+        # time_limit
+        if self.limited_time:
+            self.step_ += 1
+            if self.step_ >= self.env_time_limit:
+                done = True
+                info['time_limit'] = True
+
+        ## info
+        if self.dictObs:
+            obs['action'] = action
+            obs['reward'] = np.array(reward)
+            obs['terminal'] = np.array(False if self.no_terminal else done)
+            obs['reset'] = np.array(False)
+            obs['scans'] = raw_obs['scans'][0]
+            obs['image'] = self.lidarManager.lidar_reconstructPic
+            # import ipdb
+            # ipdb.set_trace()
+
+            self.episode.append(obs.copy())
+            if done:
+                # import ipdb
+                # ipdb.set_trace()
+                # print(self.episode)
+                episode = {k: np.array([t[k] for t in self.episode]) for k in self.episode[0]}
+                info['episode'] = episode
+
+            self.lidarManager.update_lidar_windows(wait=1, obs=obs)
+
+        return obs, reward, done, info
+
+    def reset(self):
+        starting_idx = random.sample(range(len(self.waypoints_xytheta)), 1)
+        # print(self.waypoints_xytheta[starting_idx])
+        x, y = self.waypoints_xytheta[starting_idx][0, 0], self.waypoints_xytheta[starting_idx][
+            0, 1]  # because self.waypoints_xytheta[starting_idx] has shape(1,3)
+        # theta = 2*random.random() - 1
+        theta_noise = (2*random.random() - 1) * 0.2
+        theta = self.waypoints_xytheta[starting_idx][0, 2] + theta_noise
+        starting_pos = np.array([[x, y, theta]])
+        # starting_pos[-1] += 0.5
+        raw_obs, _, _, _ = self.f110.reset(starting_pos)
+        # raw_obs, _, _, _ = self.f110.reset(np.array([[self.conf.sx, self.conf.sy, self.conf.stheta]]))
+        obs = {}
+
+        # dict
+        if self.dictObs:
+            obs['action'] = np.zeros(self.action_size)
+            obs['reward'] = np.array(0.0)
+            obs['terminal'] = np.array(False)
+            obs['reset'] = np.array(True)
+            obs['scans'] = raw_obs['scans'][0]
+            obs['image'] = self.lidarManager.lidar_reconstructPic
+            self.episode = [obs.copy()]
+
+        # time limit
+        self.step_ = 0
+        return obs
+
+
 def test_env(debug=False):
     env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
     env_cfg['display_lidar'] = True
     env_cfg['obs_shape'] = 1080
+    env_cfg['lidar_action'] = False
+
+    # env_cfg['lidar_action'] = True
     # import ipdb; ipdb.set_trace()
     env = create_f110env(**env_cfg)
     policy = GapFollowPolicy()
@@ -474,8 +584,7 @@ def test_env(debug=False):
             # print(obs['reward'])
             ##### random #######
             # obs, step_reward, done, info = env.step(0)
-            if env.display_lidar:
-                env.lidarManager.update_lidar_windows(wait=1, obs=obs)
+            env.lidarManager.update_lidar_windows(wait=1, obs=obs)
             if i % 10 == 0:
                 # print(f'step_reward: {step_reward}')
                 # print(min(obs['vecobs']))

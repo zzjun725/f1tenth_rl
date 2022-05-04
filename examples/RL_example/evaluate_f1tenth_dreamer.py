@@ -142,7 +142,8 @@ def get_reconstruct_lidar():
     cv2.waitKey(10000)
 
 if __name__ == '__main__':
-    fire.Fire({
-        'eval_visual_env': evaluate_dreamer_model,
-        'see_dream': get_reconstruct_lidar
-    })
+    # fire.Fire({
+    #     'eval_visual_env': evaluate_dreamer_model,
+    #     'see_dream': get_reconstruct_lidar
+    # })
+    evaluate_dreamer_model()

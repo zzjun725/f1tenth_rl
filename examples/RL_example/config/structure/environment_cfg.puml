@@ -1,0 +1,17 @@
+@startuml
+
+(*) -->[rlf110_env_cfg.json] "**kwargs**"
+--> ===B1===
+--> "**sim_cfg_file**"
+
+-->[config_{map_name}.yaml] "Simulator"
+===B1=== --> "**render_env**"
+
+--> (*)
+
+@enduml
+
+
+
+
+

@@ -9,8 +9,11 @@ work_dir = os.path.abspath('..')
 cfg_dir = os.path.abspath('.')
 map_dir = os.path.join(cfg_dir, 'maps')
 
+
 ### change sim_cfg_file(yaml) ###
 def get_sim_cfg(map_name='example_map'):
+    # update the sim_cfg with different maps(for obstacle)
+
     # if not map_name:
     #     raise TypeError('Must give map name')
     with open('./maps/config_example_map.yaml') as f:
@@ -57,12 +60,13 @@ def get_rlf110_cfg(task='ddqn', cfg=None):
         limited_time = False
     """
 
+
 def get_rlf110_env_cfg(map_name='example_map'):
     env_cfg = dict(
         speed=3,
         obs_shape=54,
         continuous_action=True,
-        sim_cfg_file = os.path.join(map_dir, 'config_' + map_name + '.yaml'),
+        sim_cfg_file=os.path.join(map_dir, 'config_' + map_name + '.yaml'),
         limited_time=False,
         no_terminal=False,
         env_time_limit=0,
@@ -73,6 +77,7 @@ def get_rlf110_env_cfg(map_name='example_map'):
     )
     print('get_rl_env_cfg')
     json.dump(env_cfg, open(os.path.join(cfg_dir, 'rlf110_env_cfg.json'), 'w'), indent=4)
+
 
 if __name__ == '__main__':
     # get_rlf110_cfg(task='ddqn')

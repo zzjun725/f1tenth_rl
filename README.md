@@ -1,3 +1,5 @@
+To see all the code and pre-trained models, please check the link of github repo [link](https://github.com/zzjun725/f1tenth_rl)
+
 # Environment
 The environment used by this project is forked from the [f1tenth environment](https://github.com/f1tenth/f1tenth_gym).
 
@@ -10,6 +12,24 @@ Install other requirements:
 `pip install -r requirements.txt` 
 
 Note: logging dependency is for dreamer training. If you just want to evaluate the model provided in evaluate_model, you can skip that
+
+@startmindmap
+*: **kwargs**
+
+<code>
+FileName: [rlf110_env_cfg.json]
+</code>;
+
+**: **sim_cfg_file**
+<code>
+FileName: ['config_{map_name}.yaml']
+</code>;
+
+*** d
+
+**: **render_env**
+;
+@endmindmap
 
 # Usage
 All the codes related is under example/RL_example. To run on your computer, you need to re-generate the config files to solve the path dependency.

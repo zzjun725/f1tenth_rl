@@ -73,15 +73,15 @@ def main(env_id='MiniGrid-MazeS11N-v0',
     env_cfg = {
         "speed": 3,
         "obs_shape": 108,
-        "continuous_action": True,
+        "lidar_action": True,
         "sim_cfg_file": "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml",
         "limited_time": False,
         "no_terminal": False,
         "env_time_limit": 0,
         "env_action_repeat": 1,
-        "render_env": True,
-        "display_lidar": False,
-        "dictObs": True       
+        "render_env": False,
+        "dictObs": True,
+        'display_lidar': False
     }
 
     env = create_f110env(**env_cfg)
@@ -224,7 +224,6 @@ def main(env_id='MiniGrid-MazeS11N-v0',
                 metrics_agg = defaultdict(list)
 
         # Save to npz
-
         datas.append(data)
         datas_episodes = len(datas)
         datas_steps = sum(len(d['reset']) - 1 for d in datas)
