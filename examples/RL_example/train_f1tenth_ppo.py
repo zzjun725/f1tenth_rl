@@ -5,7 +5,7 @@ from cv2 import INTER_MAX
 import yaml
 from argparse import Namespace
 from utils import render_callback, path_filler
-from f110_rlenv import F110Env_Discrete_Action, F110Env_Continuous_Action
+from f110_rlenv import F110Env_Discrete_Action, F110Env_Continuous_Action, create_f110env
 from baselineAgents.ppo_agent import PPOAgent
 from baselineAgents.ppo_continuous import PPO
 from torch.utils.tensorboard import SummaryWriter
@@ -16,23 +16,27 @@ from config.get_rlConfig import get_rlf110_cfg, path_filler
 import json
 from argparse import Namespace
 
-
 '''Env Setting'''
-with open('./config_example_map.yaml') as file:
-    conf_dict = yaml.load(file, Loader=yaml.FullLoader)
-conf = Namespace(**conf_dict)
+# with open('./config_example_map.yaml') as file:
+#     conf_dict = yaml.load(file, Loader=yaml.FullLoader)
+# conf = Namespace(**conf_dict)
+#
+# continuous_action = True
+# if continuous_action:
+#     env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
+#     eval_env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
+# else:
+#     env = F110Env_Discrete_Action(sim_cfg=conf, dictObs=False)
+#     eval_env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
+# print('continuous_action', continuous_action)
+# env.f110.add_render_callback(render_callback)
 
-continuous_action = True
-if continuous_action:
-    env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
-    eval_env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
-else:
-    env = F110Env_Discrete_Action(sim_cfg=conf, dictObs=False)
-    eval_env = F110Env_Continuous_Action(sim_cfg=conf, dictObs=False)
-print('continuous_action', continuous_action)
-env.f110.add_render_callback(render_callback)
+env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
+env_cfg['dictObs'] = False
+env = create_f110env(**env_cfg)
+eval_env = create_f110env(**env_cfg)
 
-# train
+# train for discrete
 # task = 'ppo'
 # cfg_path = os.path.join(path_filler('config'), f'rlf110_{task}cfg.json')
 # cfg = Namespace(**json.load(open(cfg_path)))
@@ -44,16 +48,16 @@ env.f110.add_render_callback(render_callback)
 # model.train(episode_num=10000, update_interval=100, render_interval=5000, save_interval=3000)
 
 
-'''Hyperparameter Setting'''
-
 cfg_path = os.path.join(path_filler('config'), 'rlf110_ppo_continuouscfg.json')
 kwargs = json.load(open(cfg_path))
-opt= Namespace(**kwargs)
+opt = Namespace(**kwargs)
 print(opt)
 
-def Action_adapter(a,max_action):
-    #from [0,1] to [-max,max]
-    return  2*(a-0.5)*max_action
+
+def policy(a, max_action):
+    # from [0,1] to [-max,max]
+    return 2 * (a - 0.5) * max_action
+
 
 def evaluate_policy(env, model, render, steps_per_epoch, max_action):
     scores = 0
@@ -63,7 +67,7 @@ def evaluate_policy(env, model, render, steps_per_epoch, max_action):
         while not (done or (steps >= steps_per_epoch)):
             # Take deterministic actions at test time
             a, logprob_a = model.evaluate(s)
-            act = Action_adapter(a, max_action)  # [0,1] to [-max,max]
+            act = policy(a, max_action)  # [0,1] to [-max,max]
             s_prime, r, done, info = env.step(act)
             # r = Reward_adapter(r, EnvIdex)
 
@@ -73,7 +77,7 @@ def evaluate_policy(env, model, render, steps_per_epoch, max_action):
             if render:
                 env.render()
         scores += ep_r
-    return scores/turns
+    return scores / turns
 
 
 def main():
@@ -81,25 +85,24 @@ def main():
     import numpy as np
 
     envname = 'f110th'
-    write = opt.write   #Use SummaryWriter to record the training.
+    write = opt.write  # Use SummaryWriter to record the training.
     render = opt.render
-    
+
     kwargs['state_dim'] = env.observation_space.shape[0]
     kwargs['action_dim'] = env.action_space.shape[0]
     kwargs['env_with_Dead'] = False
     max_action = float(env.action_space.high[0])
     max_steps = np.inf
-    T_horizon = opt.T_horizon  #lenth of long trajectory
-
+    T_horizon = opt.T_horizon  # lenth of long trajectory
 
     # Dist = ['Beta', 'GS_ms', 'GS_m'] #type of probility distribution
     # distnum = opt.distnum
 
     Max_train_steps = opt.Max_train_steps
-    save_interval = opt.save_interval#in steps
-    eval_interval = opt.eval_interval#in steps
+    save_interval = opt.save_interval  # in steps
+    eval_interval = opt.eval_interval  # in steps
 
-    random_seed = opt.seed
+    random_seed = 63
     print("Random Seed: {}".format(random_seed))
     torch.manual_seed(random_seed)
     # env.seed(random_seed)
@@ -122,7 +125,6 @@ def main():
     while total_steps < Max_train_steps:
         s, done, steps, ep_r = env.reset(), False, 0, 0
 
-        '''Interact & trian'''
         while not done:
             traj_lenth += 1
             steps += 1
@@ -133,16 +135,14 @@ def main():
             else:
                 a, logprob_a = model.select_action(s)
 
-            act = Action_adapter(a,max_action) #[0,1] to [-max,max]
+            act = policy(a, max_action)  # [0,1] to [-max,max]
             s_prime, r, done, info = env.step(act)
             # r = Reward_adapter(r, EnvIdex)
 
-            '''distinguish done between dead|win(dw) and reach env._max_episode_steps(rmax); done = dead|win|rmax'''
-            '''dw for TD_target and Adv; done for GAE'''
             if done and steps != max_steps:
                 dw = True
-                #still have exception: dead or win at _max_episode_steps will not be regard as dw.
-                #Thus, decide dw according to reward signal of each game is better.  dw = done_adapter(r)
+                # still have exception: dead or win at _max_episode_steps will not be regard as dw.
+                # Thus, decide dw according to reward signal of each game is better.  dw = done_adapter(r)
             else:
                 dw = False
 
@@ -150,31 +150,27 @@ def main():
             s = s_prime
             ep_r += r
 
-            '''update if its time'''
             if not render:
                 if traj_lenth % T_horizon == 0:
                     model.train()
                     traj_lenth = 0
-                    
-            '''record & log'''
+
             if total_steps % eval_interval == 0:
                 score = evaluate_policy(eval_env, model, True, max_steps, max_action)
                 if write:
                     writer.add_scalar('ep_r_insteps', score, global_step=total_steps)
-                print('EnvName:',envname,'seed:',random_seed,'steps: {}k'.format(int(total_steps/1000)),'score:', score)
+                print('EnvName:', envname, 'seed:', random_seed, 'steps: {}k'.format(int(total_steps / 1000)), 'score:',
+                      score)
             total_steps += 1
 
-            '''save model'''
-            if total_steps % save_interval==0:
+            if total_steps % save_interval == 0:
                 model.save(total_steps)
 
     env.close()
 
+
 if __name__ == '__main__':
     main()
-
-
-
 
 # eval
 # model_name = 'ppo_speed4_action3/models/bestmodel_step78000'

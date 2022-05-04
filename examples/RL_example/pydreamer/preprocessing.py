@@ -131,9 +131,19 @@ class Preprocessor:
 
         # action
 
+        # import ipdb; ipdb.set_trace()
+        # TMP_FIX
         if len(batch['action'].shape) == 2:
             batch['action'] = to_onehot(batch['action'], self.action_dim)
         assert len(batch['action'].shape) == 3
+        # if len(batch['action'].shape) != 3:
+        #     print(expandTB)
+        #     print(batch['action'])
+        #     print(batch['reward'].shape)
+        #     print(batch['vecobs'].shape)
+        #     # print(batch['action'].shape)
+        #     # print(batch['action'])
+
         batch['action'] = batch['action'].astype(np.float32)
 
         # reward, terminal

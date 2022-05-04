@@ -55,11 +55,11 @@ class Actor(nn.Module):
         self.continuous_action = continuous_action
         self.continuous_action_scale = 2.0
         self.net = nn.Sequential(
-            nn.Linear(state_dim, 64),
+            nn.Linear(state_dim, 128),
             nn.LeakyReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(128, 128),
             nn.LeakyReLU(),
-            nn.Linear(64, action_dim),
+            nn.Linear(128, action_dim),
         )
         
         if self.continuous_action:
@@ -119,11 +119,11 @@ class Critic(nn.Module):
     def __init__(self, state_dim):
         super(Critic, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_dim, 64),
+            nn.Linear(state_dim, 128),
             nn.LeakyReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(128, 128),
             nn.LeakyReLU(),
-            nn.Linear(64, 1),
+            nn.Linear(128, 1),
         )
 
     def forward(self, x):

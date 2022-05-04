@@ -25,15 +25,15 @@ class PurePursuitPolicy:
     def __call__(self, obs):
         pass
 
+
 class GapFollowPolicy:
     def __init__(self):
         self.model = Gap_follower()
 
-    def __call__(self, raw_obs):
-        scan = raw_obs['scans'][0]
-        action, target = self.model.planning(scan)
+    def __call__(self, obs):
+        scans = obs['scans']
+        action, target = self.model.planning(scans)
         return action, {'target_idx': target}
-        
 
 
 class NetworkPolicy:
@@ -45,7 +45,7 @@ class NetworkPolicy:
     def __call__(self, obs) -> Tuple[np.ndarray, dict]:
         batch = self.preprocess.apply(obs, expandTB=True)
         obs_model: Dict[str, Tensor] = map_structure(batch, torch.from_numpy)  # type: ignore
-
+        # import ipdb; ipdb.set_trace()
         with torch.no_grad():
             action_distr, new_state, metrics = self.model.forward(obs_model, self.state)
             action = action_distr.sample()
@@ -56,6 +56,12 @@ class NetworkPolicy:
                        policy_entropy=action_distr.entropy().mean().item())
 
         action = action.squeeze()  # (1,1,A) => A
-        # add as type to adjust to the f110RL env
+        if len(action.shape) == 0:
+            action = np.array([action.item()]).astype(np.float32)
+        else:
+            action = action.numpy()
+        # Careful! if action only has one dimension, squeeze will lead to a 0-dimension ndarray
+
+        # (old) add as type to adjust to the f110RL env
         # return action.numpy().astype(np.int64), metrics
-        return action.numpy(), metrics
+        return action, metrics

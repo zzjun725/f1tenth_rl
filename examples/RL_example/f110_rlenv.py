@@ -23,21 +23,31 @@ from time import strftime, gmtime
 import json
 import os
 
+
 def create_f110env(**kargs):
     # load simulator config file(define map, waypoints, etc)
     with open(kargs['sim_cfg_file']) as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     sim_cfg = Namespace(**conf_dict)
-    
+
     # choose continuous/discrete action space
     if kargs['continuous_action']:
         env = F110Env_Continuous_Action(sim_cfg=sim_cfg, **kargs)
     else:
         env = F110Env_Discrete_Action(sim_cfg=sim_cfg, **kargs)
-    
+
     # render option
     if kargs['render_env']:
         env.f110.add_render_callback(render_callback)
+    return env
+
+
+def create_dictObs_eval_env(cfg=None):
+    env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
+    env_cfg['dictObs'] = True
+    env_cfg['render_env'] = True
+    env_cfg['obs_shape'] = 108
+    env = create_f110env(**env_cfg)
     return env
 
 
@@ -53,15 +63,14 @@ class Waypoints_Manager:
         if self.loadWp:
             self.load_wp()
 
-
     def load_wp(self):
         with open(self.wp_path, encoding='utf-8') as f:
             self.waypoints = np.loadtxt(f, delimiter=',')
             # import ipdb; ipdb.set_trace()
             self.waypoints_xytheta = \
-                np.vstack([self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]]) 
+                np.vstack([self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]])
             self.wp = self.waypoints_xytheta  # (3, n)
-    
+
     def draw_wp(self):
         plt.plot(self.wp[0], self.wp[1], '-ro', markersize=0.1)
         plt.show()
@@ -69,38 +78,46 @@ class Waypoints_Manager:
     def get_nearest_wp(self, cur_position):
         # position: (x, y)
         wp_xyaxis = self.wp[:2]  # (2, n)
-        dist = np.linalg.norm(wp_xyaxis-cur_position.reshape(2, 1), axis=0)
+        dist = np.linalg.norm(wp_xyaxis - cur_position.reshape(2, 1), axis=0)
         nearst_idx = np.argmin(dist)
         nearst_point = wp_xyaxis[:, nearst_idx]
         return nearst_point
 
-    def get_lateral_error(self, raw_obs, ego_idx=0):
+    def get_wpbased_error(self, raw_obs, ego_idx=0):
         # pose: (x, y, yaw)
         x, y, theta = raw_obs['poses_x'][ego_idx], raw_obs['poses_y'][ego_idx], raw_obs['poses_theta'][ego_idx]
         pose = np.array([x, y, theta])
-        yaw = pose[2]
-        local2global = np.array([[np.cos(yaw), -np.sin(yaw), 0, pose[0]], 
-                                 [np.sin(yaw), np.cos(yaw), 0, pose[1]], 
-                                 [0, 0, 1, 0],
-                                 [0, 0, 0, 1]])        
-        
-        # wp_xyaxis = self.wp[:2]
         nearstP = self.get_nearest_wp(pose[:2])
 
+        euler_error = np.linalg.norm(nearstP-pose[:2])
+        # return euler_error
+
+        yaw = pose[2]
+        local2global = np.array([[np.cos(yaw), -np.sin(yaw), 0, pose[0]],
+                                 [np.sin(yaw), np.cos(yaw), 0, pose[1]],
+                                 [0, 0, 1, 0],
+                                 [0, 0, 0, 1]])
+
+        # wp_xyaxis = self.wp[:2]
         global2local = np.linalg.inv(local2global)
-        nearstP_local = global2local @ np.array([nearstP[0], nearstP[1], 0, 1]) 
-        cur_error = nearstP_local[1]
-        return abs(cur_error)
-    
+        nearstP_local = global2local @ np.array([nearstP[0], nearstP[1], 0, 1])
+        lateral_error = nearstP_local[1]
+        return abs(lateral_error)
+
     def save_wp(self, raw_obs, ego_idx=0):
         x, y, theta = raw_obs['poses_x'][ego_idx], raw_obs['poses_y'][ego_idx], raw_obs['poses_theta'][ego_idx]
         self.log.write('%f, %f, %f\n' % (x, y, theta))
 
+
 class Lidar_Manager:
-    def __init__(self, window_W=1080+250, window_H=250, scanScale=10):
+    def __init__(self, scan_dim=108, window_H=250, scanScale=10, xy_range=30):
         """
         Include the code of displays the Lidar scan and reconstruction using cv2
         """
+        window_W = scan_dim + window_H
+        self.obs_gap = int(1080/scan_dim)
+        self.scan_dim = scan_dim
+        self.dimension = scan_dim
         self.map_size = window_H
         self.map = np.zeros((self.map_size, self.map_size))
 
@@ -108,9 +125,10 @@ class Lidar_Manager:
         self.lidar_dmax = 30
         self.angle_min = -135
         self.angle_max = 135
-        self.x_min, self.x_max = -30, 30
-        self.y_min, self.y_max = -30, 30
-        self.resolution = 0.25
+        self.x_min, self.x_max = -xy_range, xy_range
+        self.y_min, self.y_max = -xy_range, xy_range
+        self.resolution = (2*xy_range) / (window_H-1)
+        print(f'lidar_resolution{self.resolution}')
         self.lidar_angles = np.linspace(self.angle_min, self.angle_max, self.dimension) * np.pi / 180
         self.interpolate_or_not = False
 
@@ -125,13 +143,13 @@ class Lidar_Manager:
         print(f'lidar_window shape{self.lidar_window.shape}')
 
     def rays2world(self, distance):
-		# convert lidar scan distance to 2d locations in space
+        # convert lidar scan distance to 2d locations in space
         x = distance * np.cos(self.lidar_angles)
         y = distance * np.sin(self.lidar_angles)
         return x, y
 
     def grid_cell_from_xy(self, x, y):
-		# convert 2d locations in space to 2d array coordinates
+        # convert 2d locations in space to 2d array coordinates
         x = np.clip(x, self.x_min, self.x_max)
         y = np.clip(y, self.y_min, self.y_max)
 
@@ -142,11 +160,16 @@ class Lidar_Manager:
 
     def interpolate(self, cell_indices):
         for i in range(cell_indices.shape[1] - 1):
-            fill_x = np.linspace(cell_indices[1, i], cell_indices[1, i+1], endpoint=False, dtype='int')
-            fill_y = np.linspace(cell_indices[0, i], cell_indices[0, i+1], endpoint=False, dtype='int')
+            fill_x = np.linspace(cell_indices[1, i], cell_indices[1, i + 1], endpoint=False, dtype='int')
+            fill_y = np.linspace(cell_indices[0, i], cell_indices[0, i + 1], endpoint=False, dtype='int')
             self.map[fill_x, fill_y] = 1
 
-    def update_scan2map(self, lidar_1d):
+    def update_scan2map(self, lidar_1d, color='r'):
+        if color == 'r':
+            color_tuple = (0, 0, 255)
+        elif color == 'b':
+            color_tuple = (255, 0, 0)
+
         self.map = np.zeros((self.map_size, self.map_size))
         self.lidar_reconstructPic = np.zeros((self.map_size, self.map_size, 3), np.uint8)
 
@@ -158,30 +181,33 @@ class Lidar_Manager:
         self.map[cell_indices[1, :], cell_indices[0, :]] = 1
 
         if self.interpolate_or_not:
-        	self.interpolate(cell_indices[:, :])
-        
-        cell_indices_line = np.vstack([cell_indices[0,:], cell_indices[1, :]]).T
-        cv2.polylines(self.lidar_reconstructPic, [cell_indices_line], False, (0, 0, 255), 5)
+            self.interpolate(cell_indices[:, :])
+
+        cell_indices_line = np.vstack([cell_indices[0, :], cell_indices[1, :]]).T
+        cv2.polylines(self.lidar_reconstructPic, [cell_indices_line], False, color_tuple, 2)
+        return self.lidar_reconstructPic
         # self.lidar_reconstructPic[:, :, 2][np.nonzero(self.map)[0], np.nonzero(self.map)[1]] = 200
         # import ipdb; ipdb.set_trace()
-		# plt.imshow(self.map)
-		# plt.show()
+
+    # plt.imshow(self.map)
+    # plt.show()
 
     def update_scan(self, best_p_idx=None, scan=None):
-        self.lidar_scanPic = np.zeros((self.window_H, 1080, 3), np.uint8)
-        scan = (scan*self.scanScale).astype(np.int64)
-        scan = np.vstack([np.arange(len(scan)).astype(np.int64), self.window_H-scan]).T
+        self.lidar_scanPic = np.zeros((self.window_H, self.scan_dim, 3), np.uint8)
+        scan = (scan * self.scanScale).astype(np.int64)
+        scan = np.vstack([np.arange(len(scan)).astype(np.int64), self.window_H - scan]).T
 
-        cv2.polylines(self.lidar_scanPic, [scan], False, (0, 0, 255), 10)
-        if best_p_idx:  
-            target = scan[max(0, best_p_idx-1):best_p_idx + 1, :]     
-            cv2.polylines(self.lidar_scanPic, [target], False, (0, 255, 0), 10)
+        cv2.polylines(self.lidar_scanPic, [scan], False, (0, 0, 255), 2)
+        if best_p_idx:
+            target = scan[max(0, best_p_idx - 1):best_p_idx + 1, :]
+            cv2.polylines(self.lidar_scanPic, [target], False, (0, 255, 0), 2)
+        return self.lidar_scanPic
 
-    
     def update_lidar_windows(self, wait=1, obs=None, target_idx=None):
-        if 'raw_obs' in obs.keys():
-            obs = obs['raw_obs']
-        scan = obs['scans'][0]
+        # if 'scans' in obs.keys():
+        scan = obs['scans']
+        scan = scan[::self.obs_gap]
+        # scan = obs['scans'][0]
         self.update_scan2map(scan)
         self.update_scan(best_p_idx=target_idx, scan=scan)
         self.lidar_window = np.hstack([self.lidar_scanPic, self.lidar_reconstructPic])
@@ -199,7 +225,7 @@ class F110Env_RL:
         self.conf = sim_cfg
         self.observation_space = spaces.Box(low=0, high=1000, shape=(self.obs_shape, 1))
         self.observation_gap = 1080 // self.obs_shape
-        
+
         # waypoints Manager, for lateral error
         self.wpManager = Waypoints_Manager(sim_cfg.wpt_path, save_wp=False, load_wp=True)
         self.wpManager.load_wp()
@@ -208,7 +234,7 @@ class F110Env_RL:
 
         # lidar
         if self.display_lidar:
-            self.lidarManager = Lidar_Manager()
+            self.lidarManager = Lidar_Manager(scan_dim=self.obs_shape)
 
         # for offline data storage
         self.action_size = self.action_space.n if hasattr(self.action_space, 'n') else self.action_space.shape[0]
@@ -219,9 +245,11 @@ class F110Env_RL:
     def reset(self):
         starting_idx = random.sample(range(len(self.waypoints_xytheta)), 1)
         # print(self.waypoints_xytheta[starting_idx])
-        x, y = self.waypoints_xytheta[starting_idx][0, 0], self.waypoints_xytheta[starting_idx][0, 1]  # because self.waypoints_xytheta[starting_idx] has shape(1,3)
+        x, y = self.waypoints_xytheta[starting_idx][0, 0], self.waypoints_xytheta[starting_idx][
+            0, 1]  # because self.waypoints_xytheta[starting_idx] has shape(1,3)
         # theta = 2*random.random() - 1
-        theta = self.waypoints_xytheta[starting_idx][0, 2]
+        theta_noise = (2*random.random() - 1) * 0.2
+        theta = self.waypoints_xytheta[starting_idx][0, 2] + theta_noise
         starting_pos = np.array([[x, y, theta]])
         # starting_pos[-1] += 0.5
         raw_obs, _, _, _ = self.f110.reset(starting_pos)
@@ -234,6 +262,7 @@ class F110Env_RL:
             obs['reward'] = np.array(0.0)
             obs['terminal'] = np.array(False)
             obs['reset'] = np.array(True)
+            obs['scans'] = raw_obs['scans'][0]
             # obs['raw_obs'] = raw_obs
             self.episode = [obs.copy()]
 
@@ -241,7 +270,7 @@ class F110Env_RL:
         self.step_ = 0
 
         return obs
-    
+
     def get_obs(self, raw_obs: dict):
         obs = raw_obs['scans'][0][::self.observation_gap]
         # print(self.observation_gap)
@@ -252,31 +281,32 @@ class F110Env_RL:
                 return {'image': obs}  # Image env
         else:
             return obs
-    
+
     def get_reward(self, raw_obs: dict, crash: bool):
-        if 'raw_obs' in raw_obs.keys():
-            raw_obs = raw_obs['raw_obs']
-        lateral_error = self.wpManager.get_lateral_error(raw_obs)
+        # if 'raw_obs' in raw_obs.keys():
+        #     raw_obs = raw_obs['raw_obs']
+        wp_based_error = self.wpManager.get_wpbased_error(raw_obs)
+
         if crash:
             reward = -0.05
-        if lateral_error > self.lateral_error_thres:
-            reward = 0
-            reward - lateral_error*0.01
+        elif wp_based_error > self.lateral_error_thres:
+            # print(f'lateral_error:{wp_based_error}')
+            reward = 0.0
+            # reward -= wp_based_error * 0.01
         else:
             reward = 0.02
         return reward
 
-    
     def render(self, mode='human'):
         self.f110.render(mode)
 
     def close(self):
         self.f110.close()
-    
+
     def get_action(self):
         raise NotImplementedError
 
-    def step(self):
+    def step(self, action):
         raise NotImplementedError
 
 
@@ -287,14 +317,13 @@ class F110Env_Discrete_Action(F110Env_RL):
         # steer, speed
         for key, value in kargs.items():
             setattr(self, key, value)
-        
+
         self.f110_action = np.array([
-              # go straight
+            # go straight
             [1, self.speed],  # go left
-            [-1, self.speed], # go right
+            [-1, self.speed],  # go right
             [0, self.speed],
         ])
-
 
     def get_action(self, action_idx: int) -> np.ndarray:
         return self.f110_action[action_idx].reshape(1, -1)
@@ -306,7 +335,8 @@ class F110Env_Discrete_Action(F110Env_RL):
                 action_vec = np.zeros(self.action_size)
                 action_vec[action] = 1.0
             else:
-                assert isinstance(action, np.ndarray) and action.shape == (self.action_size,), "Wrong one-hot action shape"
+                assert isinstance(action, np.ndarray) and action.shape == (
+                self.action_size,), "Wrong one-hot action shape"
                 action_vec = action
 
         action = self.get_action(action)
@@ -318,7 +348,7 @@ class F110Env_Discrete_Action(F110Env_RL):
         # time_limit
         if self.limited_time:
             self.step_ += 1
-            if self.step_ >= self.time_limit:
+            if self.step_ >= self.env_time_limit:
                 done = True
                 info['time_limit'] = True
 
@@ -328,7 +358,7 @@ class F110Env_Discrete_Action(F110Env_RL):
             obs['reward'] = np.array(reward)
             obs['terminal'] = np.array(False if self.no_terminal else done)
             obs['reset'] = np.array(False)
-            obs['raw_obs'] = raw_obs
+            obs['scans'] = raw_obs['scans'][0]
 
             self.episode.append(obs.copy())
             if done:
@@ -342,19 +372,27 @@ class F110Env_Discrete_Action(F110Env_RL):
 ########### Bowen Jiang, Added on Apr 17, 2022
 class F110Env_Continuous_Action(F110Env_RL):
     def __init__(self, continuous_action=True, sim_cfg=None, **kargs):
-        self.action_space = spaces.Box(low=-1, high=1, shape=(1,)) 
+        self.action_space = spaces.Box(low=-1, high=1, shape=(1,))
         super().__init__(continuous_action, sim_cfg, **kargs)
         # steer, speed
         for key, value in kargs.items():
             setattr(self, key, value)
         self.action_size = self.action_space.shape[0]
-        
+
     def get_action(self, action) -> np.ndarray:
         # if type(action) != int:
         #     return action.reshape(1, -1)
+        # try:
+        if type(action) == np.ndarray:
+            action = action[0]
+        # except:
+        #     print('no valid steer')
+        #     print(action)
+        #     action = 0.0
         steer = np.clip(action, a_min=-1, a_max=1)
+        # import ipdb; ipdb.set_trace()
         # steer = np.clip(action, a_min=-1, a_max=1)
-        action = np.array([steer, self.speed])
+        action = np.array([steer, self.speed]).astype(np.float32)
         return action.reshape(1, -1)
 
     def step(self, action):
@@ -377,7 +415,7 @@ class F110Env_Continuous_Action(F110Env_RL):
         # time_limit
         if self.limited_time:
             self.step_ += 1
-            if self.step_ >= self.time_limit:
+            if self.step_ >= self.env_time_limit:
                 done = True
                 info['time_limit'] = True
 
@@ -387,7 +425,7 @@ class F110Env_Continuous_Action(F110Env_RL):
             obs['reward'] = np.array(reward)
             obs['terminal'] = np.array(False if self.no_terminal else done)
             obs['reset'] = np.array(False)
-            # obs['raw_obs'] = raw_obs
+            obs['scans'] = raw_obs['scans'][0]
             # import ipdb
             # ipdb.set_trace()
 
@@ -404,9 +442,12 @@ class F110Env_Continuous_Action(F110Env_RL):
 
 def test_env(debug=False):
     env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
+    env_cfg['display_lidar'] = True
+    env_cfg['obs_shape'] = 1080
     # import ipdb; ipdb.set_trace()
     env = create_f110env(**env_cfg)
     policy = GapFollowPolicy()
+    # policy = RandomPolicy(action_space=env.action_space)
     wp_manager = Waypoints_Manager(save_wp=False)
 
     for ep_i in range(5):
@@ -426,22 +467,21 @@ def test_env(debug=False):
             # action = np.array([steer, speed])
 
             ##### use policy ######
-            # action, metric = policy(obs['raw_obs'])
+            action, metric = policy(obs)
             # target_idx = metric['target_idx']
             # print(action)
-            # obs, step_reward, done, info = env.step(action[0])
-
+            obs, step_reward, done, info = env.step(action)
+            # print(obs['reward'])
             ##### random #######
-            obs, step_reward, done, info = env.step(0)
+            # obs, step_reward, done, info = env.step(0)
             if env.display_lidar:
-                env.lidarManager.update_lidar_windows(wait=1, obs=obs, target_idx=target_idx)
+                env.lidarManager.update_lidar_windows(wait=1, obs=obs)
             if i % 10 == 0:
                 # print(f'step_reward: {step_reward}')
                 # print(min(obs['vecobs']))
                 # print(env.wpManager.get_lateral_error(obs['raw_obs']))
                 # print(step_reward)
                 pass
-                
             # if i > 100 and i % 5 == 0:
             #     wp_manager.save_wp(obs['raw_obs'])
             # print(done)
@@ -455,7 +495,6 @@ def test_env(debug=False):
         #         plt.title(f'dimension=54')
         #         plt.show()
         print('finish one episode')
-
 
 
 if __name__ == '__main__':

@@ -74,7 +74,7 @@ def main(env_id='MiniGrid-MazeS11N-v0',
         "speed": 3,
         "obs_shape": 108,
         "continuous_action": True,
-        "sim_cfg_file": "/home/zzjun/Documents/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml",
+        "sim_cfg_file": "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml",
         "limited_time": False,
         "no_terminal": False,
         "env_time_limit": 0,
@@ -121,6 +121,7 @@ def main(env_id='MiniGrid-MazeS11N-v0',
     while steps < num_steps:
 
         # load model
+        ## TMP_FIX
         if model is not None:
             if time.time() - last_model_load > model_reload_interval:
                 while True:

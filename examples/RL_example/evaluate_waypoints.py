@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-waypoints_file = './example_waypoints.csv'
+waypoints_file = None
 
 with open(waypoints_file, encoding='utf-8') as f:
     waypoints = np.loadtxt(f, delimiter=';')

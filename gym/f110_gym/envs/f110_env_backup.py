@@ -559,7 +559,7 @@ class F110Env(gym.Env, utils.EzPickle):
         # create update proto
         update_param_proto = sim_requests_pb2.SimRequest()
         update_param_proto.type = 3
-        update_param_proto.update_request.mu = mu
+        update_param_proto.update_request.mu_head = mu
         update_param_proto.update_request.h_cg = h_cg
         update_param_proto.update_request.l_r = l_r
         update_param_proto.update_request.cs_f = cs_f

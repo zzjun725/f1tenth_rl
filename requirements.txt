@@ -1,5 +1,6 @@
 torch
 gym[atari]==0.18.3  # newer gym version breaks atari_py
+fire
 
 # Logging
 mlflow==1.22.0

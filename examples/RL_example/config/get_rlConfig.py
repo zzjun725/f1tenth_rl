@@ -24,17 +24,18 @@ def get_sim_cfg(map_name='example_map'):
 
 
 def path_filler(path=None):
-    abs_path = os.path.abspath(os.path.join('..', path))
+    abs_path = os.path.abspath(os.path.join('.', path))
     return abs_path
 
 
 def fill_cfg(task):
+    upper_dir = os.path.abspath('..')
     result_dir = path_filler('result')
     default_cfg = dict(
         task_name=task,
         result_dir=os.path.join(result_dir, task),
         log_dir=os.path.join(result_dir, task, 'logs'),
-        model_dir=os.path.join(result_dir, task, 'models')
+        model_dir=os.path.join(upper_dir, 'evaluate_model')
     )
     return default_cfg
 
@@ -77,6 +78,7 @@ if __name__ == '__main__':
     # get_rlf110_cfg(task='ddqn')
     fire.Fire({
         'get_sim_cfg': get_sim_cfg,
-        'get_env_cfg': get_rlf110_env_cfg
+        'get_env_cfg': get_rlf110_env_cfg,
+        'get_ppo_discrete_cfg': get_rlf110_cfg(task='ppo')
     })
     

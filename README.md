@@ -1,5 +1,5 @@
 # Environment
-This is a RL algorithm test based on the [f1tenth_gym environment](https://github.com/f1tenth/f1tenth_gym).
+The environment used by this project is based on the [f1tenth environment](https://github.com/f1tenth/f1tenth_gym).
 
 Install the environment: inside this repo, run 
 
@@ -9,143 +9,197 @@ Install other requirements:
 
 `pip install -r requirements.txt` 
 
-# Usage
+Note: logging dependency is for dreamer training. If you just want to evaluate the model provided in evaluate_model, you can skip that
 
-- generate training config `get_rlConfig.py`
-- train/ evaluation with D3QN  `train_f1tenth_dqn.py`
-- train/ evaluation with PPO `train_f1tenth_ppo.py`
+# Usage
+All the codes related is under example/RL_example. To run on your computer, you need to re-generate the config files to solve the path dependency.
+- visualize environment with LiDAR and distance reconstruction `example/RL_example/f110_rlenv.py`
+- generate training config `example/RL_example/config/get_rlConfig.py`
+- train with D3QN  `example/RL_example/train_f1tenth_dqn.py`
+- train with PPO `example/RL_example/train_f1tenth_ppo.py`
+- evaluate with PPO `example/RL_example/evaluate_f1tenth_ppo.py`
+Note that evaluate with PPO provide both continuous and discrete environment. 
 
 # Module Definition
 
 - **f110_rlenv.py**
 
-wrapped the original `f110-v0` gym environment so that this class has the standard `reset`, `step` function as the classic gym environment(make it easy to test different open source RL frame like Ray). 
+Wrapped the original `f110-v0` gym environment so that this class has the standard `reset`, `step` function as the classic gym environment. 
 
-classify the discrete action space and add several functions to modify the reward and observation space.
+Classify the discrete and continuous action space and add several functions to modify the reward and observation space.
 
-- **d3qn_agent.py**
+Add scan and waypoint manager classes for better visualization and training performance.
 
-implement an agent with double and dueling DQN.
+- **baselineAgents**
 
-- **ppo_agent.py**
+Including the implementation of all the baseline agents such as ppo(for both continuous and discrete space) and dqn.
 
-implement a ppo agent with GAE as the metric of advantage funciton. 
+- **evaluate_model**
 
-- **train_f1tenth_dqn.py**
+Including all the models for evaluation.
 
-the entry of training or evaluation task.
 
+[//]: # (# Training with PPO)
 
+[//]: # ()
+[//]: # (## Overview of results)
 
-# Training with PPO
+[//]: # ()
+[//]: # (After some fine-tuning on the hyper-parameters and adjustments on the environment design,  The trained agent is able to run over the given map without collision. )
 
-## Overview of results
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\others\un_collision_model1.gif" alt="un_collision_model1"  />)
 
-After some fine-tuning on the hyper-parameters and adjustments on the environment design,  The trained agent is able to run over the given map without collision. 
+[//]: # ()
+[//]: # (Because of the limitation of the length of gif format, check 'un_collision_model1.mp4' in the same directory for the full video.)
 
-<img src=".\examples\RL_example\result\others\un_collision_model1.gif" alt="un_collision_model1"  />
+[//]: # ()
+[//]: # (In multiple experiments with similar parameters, after training for a lot episodes the car seems to converge to a 'wiggle' between left and right even when it is racing on a straight road.)
 
-Because of the limitation of the length of gif format, check 'un_collision_model1.mp4' in the same directory for the full video.
+[//]: # ()
+[//]: # (Besides, an agent which generate smooth path might occur in the middle of training and it already had a fair performance. The video below illustrated an agent which only fail to pass one corner in the whole map. )
 
-In multiple experiments with similar parameters, after training for a lot episodes the car seems to converge to a 'wiggle' between left and right even when it is racing on a straight road.
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\others\smooth_path.gif" alt="smooth_path"  />)
 
-Besides, an agent which generate smooth path might occur in the middle of training and it already had a fair performance. The video below illustrated an agent which only fail to pass one corner in the whole map. 
+[//]: # ()
+[//]: # ()
+[//]: # ()
+[//]: # (## Adjustment on Environment)
 
-<img src=".\examples\RL_example\result\others\smooth_path.gif" alt="smooth_path"  />
+[//]: # ()
+[//]: # (### Observation Space)
 
+[//]: # ()
+[//]: # (The original observation space is a 1080-dimension np.ndarray contained all the information of the beams. However, I think those information might be redundant for our task because with lower sample rate, it is still possible to derive the relative distance of the boundary and the car. As a result, I did uniform sampling on the original observation space and reduce the dimension to 27.)
 
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\ddqn\image\obs108" alt="image-20211118151713940" style="zoom:63%;" /><img src=".\examples\RL_example\result\ddqn\image\obs1080" alt="image-20211118151730035" style="zoom:63%;" />)
 
-## Adjustment on Environment
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\others\obs27.PNG" alt="obs27" style="zoom:61%;" /><img src=".\examples\RL_example\result\others\obs54.PNG" alt="obs54" style="zoom: 63%;" />)
 
-### Observation Space
+[//]: # ()
+[//]: # (Take an example of the beam scan information of a specific position of the car in the f1tenth gym environment. It can be shown from the picture that the features are nearly the same with uniform sampling and the curve is more smooth.)
 
-The original observation space is a 1080-dimension np.ndarray contained all the information of the beams. However, I think those information might be redundant for our task because with lower sample rate, it is still possible to derive the relative distance of the boundary and the car. As a result, I did uniform sampling on the original observation space and reduce the dimension to 27.
+[//]: # ()
+[//]: # ()
+[//]: # ()
+[//]: # (### Action Space)
 
-<img src=".\examples\RL_example\result\ddqn\image\obs108" alt="image-20211118151713940" style="zoom:63%;" /><img src=".\examples\RL_example\result\ddqn\image\obs1080" alt="image-20211118151730035" style="zoom:63%;" />
+[//]: # ()
+[//]: # (The original action space of f1tenth env is a continuous action space&#40;steer, speed&#41;. After discretization, I choose three actions: turn left, turn right and keep the direction. It is worth noticing that all the actions has the same positive speed as the input. since the current goal is keeping the car on the right track without collision, I think it is useful to begin with a more straightforward task.)
 
-<img src=".\examples\RL_example\result\others\obs27.PNG" alt="obs27" style="zoom:61%;" /><img src=".\examples\RL_example\result\others\obs54.PNG" alt="obs54" style="zoom: 63%;" />
+[//]: # ()
+[//]: # (I also tried adding the reduction of speed to the action space, but it turned out the agent just learned to stick in the original space without moving. Besides, if  two speed transmissions are set, the agent will converge to choose the action which has lower speed. I think it is natural because high speed is more easily to have collision.)
 
-Take an example of the beam scan information of a specific position of the car in the f1tenth gym environment. It can be shown from the picture that the features are nearly the same with uniform sampling and the curve is more smooth.
+[//]: # ()
+[//]: # (```python)
 
+[//]: # (# the final action space of the car)
 
+[//]: # (# speed=3)
 
-### Action Space
+[//]: # (self.f110_action = np.array&#40;[)
 
-The original action space of f1tenth env is a continuous action space(steer, speed). After discretization, I choose three actions: turn left, turn right and keep the direction. It is worth noticing that all the actions has the same positive speed as the input. since the current goal is keeping the car on the right track without collision, I think it is useful to begin with a more straightforward task.
+[//]: # (    [1, speed],  # go left)
 
-I also tried adding the reduction of speed to the action space, but it turned out the agent just learned to stick in the original space without moving. Besides, if  two speed transmissions are set, the agent will converge to choose the action which has lower speed. I think it is natural because high speed is more easily to have collision.
+[//]: # (    [-1, speed], # go right)
 
-```python
-# the final action space of the car
-# speed=3
-self.f110_action = np.array([
-    [1, speed],  # go left
-    [-1, speed], # go right
-    [0, speed],  # go straight
-])
-```
+[//]: # (    [0, speed],  # go straight)
 
+[//]: # (]&#41;)
 
+[//]: # (```)
 
-### Modify the Step and reset function
+[//]: # ()
+[//]: # ()
+[//]: # ()
+[//]: # (### Modify the Step and reset function)
 
-To make the collection of training data more efficient, I stack three steps in the simulation environment as a single step in the RL-env with the same action. Besides, instead of reset the car in the same position every time, I sampled a random point on the track as the initial position so that it would not stuck in useless experiences in the beginning.
+[//]: # ()
+[//]: # (To make the collection of training data more efficient, I stack three steps in the simulation environment as a single step in the RL-env with the same action. Besides, instead of reset the car in the same position every time, I sampled a random point on the track as the initial position so that it would not stuck in useless experiences in the beginning.)
 
+[//]: # ()
+[//]: # ()
+[//]: # ()
+[//]: # (### Reward)
 
+[//]: # ()
+[//]: # (I changed a little terms on the reward design, including penalty on hitting the wall as well as being too close to the wall, and making a scaling on the final step reward.)
 
-### Reward
+[//]: # ()
+[//]: # ()
+[//]: # ()
+[//]: # (## Training)
 
-I changed a little terms on the reward design, including penalty on hitting the wall as well as being too close to the wall, and making a scaling on the final step reward.
+[//]: # ()
+[//]: # ( The hyper-parameters of the PPO agent are as follows:)
 
+[//]: # ()
+[//]: # (| Lr    | eps_clip | gamma | gae_lambda | epochs_per_update | step_per_update | episode |)
 
+[//]: # (| ----- | -------- | ----- | ---------- | ----------------- | --------------- | ------- |)
 
-## Training
+[//]: # (| 0.001 | 0.2      | 0.99  | 0.95       | 3                 | 100             | 5000    |)
 
- The hyper-parameters of the PPO agent are as follows:
+[//]: # ()
+[//]: # (I set the maximum episode to 5000, but usually 600-700 episodes are enough for training a fair agent since the goal is quite straight.)
 
-| Lr    | eps_clip | gamma | gae_lambda | epochs_per_update | step_per_update | episode |
-| ----- | -------- | ----- | ---------- | ----------------- | --------------- | ------- |
-| 0.001 | 0.2      | 0.99  | 0.95       | 3                 | 100             | 5000    |
+[//]: # ()
+[//]: # (After several training test, I find out the success rate is highly depending on the exploration in the beginning. For example, it might be the case that the agent is stuck in a local minima of turning a circle or just keeping going straight whatever the environments are. Adding the penalty on hitting the wall as well as being too close to the wall alleviate this situation.)
 
-I set the maximum episode to 5000, but usually 600-700 episodes are enough for training a fair agent since the goal is quite straight.
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\others\ppo_cyclefail.PNG" alt="ppo_cyclefail"  />)
 
-After several training test, I find out the success rate is highly depending on the exploration in the beginning. For example, it might be the case that the agent is stuck in a local minima of turning a circle or just keeping going straight whatever the environments are. Adding the penalty on hitting the wall as well as being too close to the wall alleviate this situation.
+[//]: # ()
+[//]: # (This curve above demonstrated a typical result of training an agent which just turn around all the time until it hit the wall.)
 
-<img src=".\examples\RL_example\result\others\ppo_cyclefail.PNG" alt="ppo_cyclefail"  />
+[//]: # ()
+[//]: # ( As for a success trained model, the curve of score is more bouncing with a obvious rising trend:)
 
-This curve above demonstrated a typical result of training an agent which just turn around all the time until it hit the wall.
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\others\ppo_speed4_action3_success.PNG" alt="ppo_speed4_action3_success"  />)
 
- As for a success trained model, the curve of score is more bouncing with a obvious rising trend:
+[//]: # ()
+[//]: # (It is worth noting that during the training process, I have observed several interesting behaviors of the agent.)
 
-<img src=".\examples\RL_example\result\others\ppo_speed4_action3_success.PNG" alt="ppo_speed4_action3_success"  />
+[//]: # ()
+[//]: # (- Turning around)
 
-It is worth noting that during the training process, I have observed several interesting behaviors of the agent.
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\others\turning_around.gif" alt="turning_around"  />)
 
-- Turning around
+[//]: # ()
+[//]: # (- Turning back)
 
-<img src=".\examples\RL_example\result\others\turning_around.gif" alt="turning_around"  />
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\others\turning_back.gif" alt="turning_back"  />)
 
-- Turning back
+[//]: # ()
+[//]: # (However, the best model always tend to has a 'wiggle' feature during the whole time, maybe taking the action of turning left or right gives the car more opportunities to pass the corner.)
 
-<img src=".\examples\RL_example\result\others\turning_back.gif" alt="turning_back"  />
+[//]: # ()
+[//]: # (<img src="D:\Code_Projects\f1tenth_gym\examples\RL_example\result\others\wiggle_2.gif" alt="wiggle_2"  />)
 
-However, the best model always tend to has a 'wiggle' feature during the whole time, maybe taking the action of turning left or right gives the car more opportunities to pass the corner.
+[//]: # ()
+[//]: # ()
+[//]: # ()
+[//]: # ()
+[//]: # ()
+[//]: # (# Training with DQN)
 
-<img src="D:\Code_Projects\f1tenth_gym\examples\RL_example\result\others\wiggle_2.gif" alt="wiggle_2"  />
+[//]: # ()
+[//]: # (When it comes to DQN, the result is not as good as PPO. After converge, the agent just tend to turn around forever or do nothing but go straight. The current agent structure is D3QN &#40;with dueling network and double DQN&#41;. I think more adjustments may be needed training with DQN to get a fair result.)
 
+[//]: # ()
+[//]: # (A typical training result is demonstrated as followed. )
 
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\ddqn\image\reward" alt="image-20211118121124500"  />)
 
-
-
-# Training with DQN
-
-When it comes to DQN, the result is not as good as PPO. After converge, the agent just tend to turn around forever or do nothing but go straight. The current agent structure is D3QN (with dueling network and double DQN). I think more adjustments may be needed training with DQN to get a fair result.
-
-A typical training result is demonstrated as followed. 
-
-<img src=".\examples\RL_example\result\ddqn\image\reward" alt="image-20211118121124500"  />
-
- 
-
-<img src=".\examples\RL_example\result\ddqn\image\loss" alt="image-20211118121159984"  />
+[//]: # ()
+[//]: # ( )
+[//]: # ()
+[//]: # (<img src=".\examples\RL_example\result\ddqn\image\loss" alt="image-20211118121159984"  />)
 
