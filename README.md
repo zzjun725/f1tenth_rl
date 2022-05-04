@@ -13,12 +13,14 @@ Note: logging dependency is for dreamer training. If you just want to evaluate t
 
 # Usage
 All the codes related is under example/RL_example. To run on your computer, you need to re-generate the config files to solve the path dependency.
-- visualize environment with LiDAR and distance reconstruction `example/RL_example/f110_rlenv.py`
+- visualize environment with LiDAR and distance reconstruction([video](https://drive.google.com/file/d/1pf5z0KcnPATvTQf8BxCaICx7zfznoXmu/view?usp=sharing)) `example/RL_example/f110_rlenv.py`
 - generate training config `example/RL_example/config/get_rlConfig.py`
 - train with D3QN  `example/RL_example/train_f1tenth_dqn.py`
 - train with PPO `example/RL_example/train_f1tenth_ppo.py`
 - evaluate with PPO `example/RL_example/evaluate_f1tenth_ppo.py`
-Note that evaluate with PPO provide both continuous and discrete environment. 
+Note that evaluate with PPO provide both continuous([video](https://drive.google.com/file/d/1AcNPpWkZnkifcYpcsxazveSrb5Wwgmq7/view?usp=sharing)) and discrete environment([video](https://drive.google.com/file/d/1OsrkJUFsln1yM19JoXoBbK6iBL2oxFiM/view?usp=sharing)).
+- evaluate and reconstruction from latent space with dreamer `example/RL_example/evaluate_f1tenth_dream.py`
+Note that the model of dreamer is too big, so we stored it in [google drive](https://drive.google.com/file/d/19o6du-l7uLfSlpW7HsG79sze7Sg-QSRY/view?usp=sharing)
 
 # Module Definition
 
