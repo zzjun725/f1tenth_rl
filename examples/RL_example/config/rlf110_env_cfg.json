@@ -2,12 +2,13 @@
     "speed": 3,
     "obs_shape": 54,
     "continuous_action": true,
-    "sim_cfg_file": "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_levine_test4.yaml",
+    "sim_cfg_file": "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_levine_block.yaml",
     "limited_time": false,
     "no_terminal": false,
     "env_time_limit": 0,
     "env_action_repeat": 1,
     "render_env": true,
     "display_lidar": false,
-    "dictObs": true
+    "dictObs": true,
+    "lidar_action": false
 }

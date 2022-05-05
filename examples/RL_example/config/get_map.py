@@ -1,4 +1,5 @@
 import cv2
+import fire
 import yaml
 import os
 
@@ -29,7 +30,9 @@ def pgm2png(rawMap_name='levine_test4'):
 
 
 if __name__ == '__main__':
-    pgm2png()
+    fire.Fire({
+        'get_pngmap': pgm2png
+    })
 
 
 

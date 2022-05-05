@@ -44,7 +44,7 @@ defaults:
   adam_eps: 1.0e-5
   keep_state: True
   batch_length: 50
-  batch_size: 50
+  batch_size: 20
   device: "cuda:0"
   grad_clip: 200
   grad_clip_ac: 200
@@ -60,10 +60,10 @@ defaults:
 
   # Model
   model: dreamer
-  deter_dim: 2048
+  deter_dim: 256
   stoch_dim: 32
   stoch_discrete: 32
-  hidden_dim: 1000
+  hidden_dim: 125
   gru_layers: 1
   gru_type: gru
   layer_norm: True
@@ -226,8 +226,9 @@ lidar:
   action_dim: 1
   env_time_limit: 100000
   actor_dist: normal_tanh
-  generator_workers: 4
-  data_workers: 4
+  generator_workers: 1
+  data_workers: 1
+  save_interval: 300
 
-  image_size: 25
+  image_size: 64
   image_channels: 1

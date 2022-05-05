@@ -32,7 +32,7 @@ def pre_process_LiDAR(ranges, window_size, danger_thres, rb):
     return proc_ranges
 
 # @njit(fastmath=False, cache=True)
-def find_target_point(ranges, safe_thres, max_gap_length=350, min_gap_length=50):
+def find_target_point(ranges, safe_thres, max_gap_length=350, min_gap_length=0):
     """_summary_
         Find all the gaps exceed a safe thres. 
         Among those qualified gaps, chose the one with a farmost point, calculate the target as the middle of the gap.
@@ -71,9 +71,25 @@ def find_target_point(ranges, safe_thres, max_gap_length=350, min_gap_length=50)
                 target = (safe_p_left+safe_p_right)//2
                 if 190 < target < 900:
                     return target
-    # if not target:
-    #     import ipdb;
-    #     ipdb.set_trace()
+    if not target:
+        n = len(ranges)
+        safe_p_left, safe_p_right = 0, n - 1
+        p = safe_p_left
+        safe_range = PriorityQueue()
+        while p < n - 1:
+            if ranges[p] >= safe_thres:
+                safe_p_left = p
+                p += 1
+                # while p < end_i and ranges[p] >= self.safe_thres and p-safe_p_left <= 290:
+                while p < n - 1 and ranges[p] >= safe_thres and p - safe_p_left <= max_gap_length:
+                    p += 1
+                safe_p_right = p - 1
+                if safe_p_right != safe_p_left:
+                    safe_range.put((-(np.max(ranges[safe_p_left:safe_p_right])), (safe_p_left, safe_p_right)))
+            else:
+                p += 1
+        import ipdb;
+        ipdb.set_trace()
 
 class Gap_follower:
     def __init__(self) -> None:
@@ -84,8 +100,10 @@ class Gap_follower:
         self.angle_min = -2.35
         self.max_speed = 6
 
-        self.safe_thres = 3.0
-        self.danger_thres = 1.2
+        # self.safe_thres = 3.0
+        # self.danger_thres = 1.2
+        self.safe_thres = 1.5
+        self.danger_thres = 0.8
         self.rb = 10
         self.P = 0.6
 

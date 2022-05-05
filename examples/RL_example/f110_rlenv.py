@@ -1,4 +1,5 @@
 # -- coding: utf-8 --
+import fire
 from f110_gym.envs.f110_env import F110Env
 from gym import spaces
 
@@ -500,12 +501,11 @@ class F110Env_LiDAR_Action(F110Env_RL):
             obs['terminal'] = np.array(False if self.no_terminal else done)
             obs['reset'] = np.array(False)
             obs['scans'] = raw_obs['scans'][0]
-            obs['image'] = cv2.resize(self.lidarManager.lidar_reconstructPic[:, :, 2], (25, 25))
-            print((obs['image'] > 0).sum())
+            obs['image'] = cv2.resize(self.lidarManager.lidar_reconstructPic[:, :, 2], (64, 64))[:, :, np.newaxis]
+            # print((obs['image'] > 0).sum())
 
-            cv2.imshow('debug', obs['image'])
-            cv2.waitKey(1)
-            # import ipdb
+#
+#             # import ipdb
             # ipdb.set_trace()
 
             self.episode.append(obs.copy())
@@ -541,7 +541,7 @@ class F110Env_LiDAR_Action(F110Env_RL):
             obs['terminal'] = np.array(False)
             obs['reset'] = np.array(True)
             obs['scans'] = raw_obs['scans'][0]
-            obs['image'] = cv2.resize(self.lidarManager.lidar_reconstructPic[:, :, 2], (25, 25))
+            obs['image'] = cv2.resize(self.lidarManager.lidar_reconstructPic[:, :, 2], (64, 64))[:, :, np.newaxis]
             self.episode = [obs.copy()]
 
         # time limit
@@ -608,7 +608,35 @@ def test_env(debug=False):
         print('finish one episode')
 
 
+def test_block_env():
+    env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
+    env_cfg['render_env'] = True
+    env_cfg['display_lidar'] = True
+    env_cfg['obs_shape'] = 1080
+    env = create_f110env(**env_cfg)
+    policy = GapFollowPolicy()
+    # policy = RandomPolicy(action_space=env.action_space)
+
+    for ep_i in range(20):
+        obs = env.reset()
+        done = False
+        i = 0
+        min_obs = []
+        while not done:
+            i += 1
+            env.render()
+            steer = 0
+            speed = 1
+            ##### use policy ######
+            action, metric = policy(obs)
+            obs, step_reward, done, info = env.step(action)
+        print('finish one episode')
+
+
 if __name__ == '__main__':
     # wp_manager = Waypoints_Manager(wp_path='./new_wp.csv', save_wp=False, load_wp=True)
     # wp_manager.draw_wp()
-    test_env(debug=True)
+    fire.Fire({
+        'test_env': test_env,
+        'test_block_env': test_block_env
+    })

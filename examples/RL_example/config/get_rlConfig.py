@@ -73,7 +73,8 @@ def get_rlf110_env_cfg(map_name='example_map'):
         env_action_repeat=1,
         render_env=True,
         display_lidar=False,
-        dictObs=True
+        dictObs=True,
+        lidar_action=False
     )
     print('get_rl_env_cfg')
     json.dump(env_cfg, open(os.path.join(cfg_dir, 'rlf110_env_cfg.json'), 'w'), indent=4)
