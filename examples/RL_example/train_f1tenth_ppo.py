@@ -33,6 +33,7 @@ from argparse import Namespace
 
 env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
 env_cfg['dictObs'] = False
+env_cfg['obs_shape'] = 54
 env = create_f110env(**env_cfg)
 eval_env = create_f110env(**env_cfg)
 

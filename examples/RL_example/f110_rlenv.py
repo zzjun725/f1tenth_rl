@@ -40,6 +40,7 @@ def create_f110env(**kargs):
 
     # render option
     if kargs['render_env']:
+        print('render')
         env.f110.add_render_callback(render_callback)
     return env
 
@@ -187,10 +188,8 @@ class Lidar_Manager:
             self.interpolate(cell_indices[:, :])
 
         cell_indices_line = np.vstack([cell_indices[0, :], cell_indices[1, :]]).T
-        if self.display_lidar:
-            cv2.polylines(self.lidar_reconstructPic, [cell_indices_line], False, color_tuple, 2)
+        cv2.polylines(self.lidar_reconstructPic, [cell_indices_line], False, color_tuple, 2)
         return self.lidar_reconstructPic
-        # self.lidar_reconstructPic[:, :, 2][np.nonzero(self.map)[0], np.nonzero(self.map)[1]] = 200
         # import ipdb; ipdb.set_trace()
 
     # plt.imshow(self.map)
@@ -200,7 +199,6 @@ class Lidar_Manager:
         self.lidar_scanPic = np.zeros((self.window_H, self.scan_dim, 3), np.uint8)
         scan = (scan * self.scanScale).astype(np.int64)
         scan = np.vstack([np.arange(len(scan)).astype(np.int64), self.window_H - scan]).T
-
 
         cv2.polylines(self.lidar_scanPic, [scan], False, (0, 0, 255), 2)
         if best_p_idx:
@@ -502,7 +500,11 @@ class F110Env_LiDAR_Action(F110Env_RL):
             obs['terminal'] = np.array(False if self.no_terminal else done)
             obs['reset'] = np.array(False)
             obs['scans'] = raw_obs['scans'][0]
-            obs['image'] = self.lidarManager.lidar_reconstructPic
+            obs['image'] = cv2.resize(self.lidarManager.lidar_reconstructPic[:, :, 2], (25, 25))
+            print((obs['image'] > 0).sum())
+
+            cv2.imshow('debug', obs['image'])
+            cv2.waitKey(1)
             # import ipdb
             # ipdb.set_trace()
 
@@ -539,7 +541,7 @@ class F110Env_LiDAR_Action(F110Env_RL):
             obs['terminal'] = np.array(False)
             obs['reset'] = np.array(True)
             obs['scans'] = raw_obs['scans'][0]
-            obs['image'] = self.lidarManager.lidar_reconstructPic
+            obs['image'] = cv2.resize(self.lidarManager.lidar_reconstructPic[:, :, 2], (25, 25))
             self.episode = [obs.copy()]
 
         # time limit
@@ -549,10 +551,11 @@ class F110Env_LiDAR_Action(F110Env_RL):
 
 def test_env(debug=False):
     env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
+    env_cfg['render_env'] = True
     env_cfg['display_lidar'] = True
     env_cfg['obs_shape'] = 1080
-    env_cfg['lidar_action'] = False
-
+    env_cfg['lidar_action'] = True
+    env_cfg['sim_cfg_file'] = "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml"
     # env_cfg['lidar_action'] = True
     # import ipdb; ipdb.set_trace()
     env = create_f110env(**env_cfg)
@@ -563,7 +566,6 @@ def test_env(debug=False):
     for ep_i in range(5):
         obs = env.reset()
         done = False
-        # env.render()
         i = 0
         min_obs = []
         while not done:
@@ -584,7 +586,7 @@ def test_env(debug=False):
             # print(obs['reward'])
             ##### random #######
             # obs, step_reward, done, info = env.step(0)
-            env.lidarManager.update_lidar_windows(wait=1, obs=obs)
+            # env.lidarManager.update_lidar_windows(wait=1, obs=obs)
             if i % 10 == 0:
                 # print(f'step_reward: {step_reward}')
                 # print(min(obs['vecobs']))

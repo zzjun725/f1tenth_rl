@@ -71,9 +71,9 @@ def find_target_point(ranges, safe_thres, max_gap_length=350, min_gap_length=50)
                 target = (safe_p_left+safe_p_right)//2
                 if 190 < target < 900:
                     return target
-    if not target:
-        import ipdb;
-        ipdb.set_trace()
+    # if not target:
+    #     import ipdb;
+    #     ipdb.set_trace()
 
 class Gap_follower:
     def __init__(self) -> None:
