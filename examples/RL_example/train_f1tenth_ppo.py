@@ -33,7 +33,8 @@ from argparse import Namespace
 
 env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
 env_cfg['dictObs'] = False
-env_cfg['obs_shape'] = 54
+env_cfg['obs_shape'] = 1080
+# env_cfg["sim_cfg_file"]= "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml"
 env = create_f110env(**env_cfg)
 eval_env = create_f110env(**env_cfg)
 
@@ -89,15 +90,12 @@ def main():
     write = opt.write  # Use SummaryWriter to record the training.
     render = opt.render
 
-    kwargs['state_dim'] = env.observation_space.shape[0]
+    kwargs['state_dim'] = 54  # env.observation_space.shape[0]
     kwargs['action_dim'] = env.action_space.shape[0]
     kwargs['env_with_Dead'] = False
     max_action = float(env.action_space.high[0])
     max_steps = np.inf
     T_horizon = opt.T_horizon  # lenth of long trajectory
-
-    # Dist = ['Beta', 'GS_ms', 'GS_m'] #type of probility distribution
-    # distnum = opt.distnum
 
     Max_train_steps = opt.Max_train_steps
     save_interval = opt.save_interval  # in steps
@@ -123,8 +121,9 @@ def main():
 
     traj_lenth = 0
     total_steps = 0
+    restart_wp = None
     while total_steps < Max_train_steps:
-        s, done, steps, ep_r = env.reset(), False, 0, 0
+        s, done, steps, ep_r = env.reset(traceback_restart=False), False, 0, 0
 
         while not done:
             traj_lenth += 1

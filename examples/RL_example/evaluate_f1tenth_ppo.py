@@ -9,12 +9,12 @@ from baselineAgents.ppo_agent import PPOAgent
 from f110_rlenv import create_f110env
 
 
-def policy(a, max_action):
+def action_adapter(a, max_action):
     # from [0,1] to [-max,max]
     return 2 * (a - 0.5) * max_action
 
 
-def evaluate_policy(env, model, render, steps_per_epoch, max_action):
+def evaluate_policy(env, model, render, steps_per_epoch, max_action, obs_gap=None):
     scores = 0
     turns = 2
     for j in range(turns):
@@ -22,10 +22,11 @@ def evaluate_policy(env, model, render, steps_per_epoch, max_action):
         while not (done or (steps >= steps_per_epoch)):
             # Take deterministic actions at test time
             a, logprob_a = model.evaluate(s)
-            act = policy(a, max_action)  # [0,1] to [-max,max]
+            act = action_adapter(a, max_action)  # [0,1] to [-max,max]
             s_prime, r, done, info = env.step(act)
             # r = Reward_adapter(r, EnvIdex)
-
+            if env.display_lidar:
+                env.lidarManager.update_lidar_windows(wait=1, obs=info)
             ep_r += r
             steps += 1
             s = s_prime
@@ -38,22 +39,26 @@ def evaluate_policy(env, model, render, steps_per_epoch, max_action):
 def evaluate_continuous_ppo():
     env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
     env_cfg['dictObs'] = False
-    env_cfg['obs_shape'] = 54
+    env_cfg['obs_shape'] = 1080
+    env_cfg['display_lidar'] = True
+    env_cfg['lidar_action'] = False
+    env_cfg['continuous_action'] = True
     env = create_f110env(**env_cfg)
 
     cfg_path = os.path.join(path_filler('config'), 'rlf110_ppo_continuouscfg.json')
     kwargs = json.load(open(cfg_path))
     opt = Namespace(**kwargs)
-    kwargs['state_dim'] = env.observation_space.shape[0]
+    kwargs['state_dim'] = 54
     kwargs['action_dim'] = env.action_space.shape[0]
     kwargs['env_with_Dead'] = False
     model = PPO(**kwargs)
     # model.actor.load_state_dict(torch.load('./evaluate_model/ppo/ppo_actor70000.pth'))
     # model.critic.load_state_dict(torch.load('./evaluate_model/ppo/ppo_critic70000.pth'))
-    model.load(episode=25000)
+    model.load(episode=30000)
 
+    env.lidarManager.reset_obs_dim(new_dim=kwargs['state_dim'])
     for _ in range(5):
-        evaluate_policy(env, model, True, 10000, 1)
+        evaluate_policy(env, model, True, 10000, 1, obs_gap=1080//kwargs['state_dim'])
         print('finish one episode')
 
 

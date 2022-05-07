@@ -1,13 +1,31 @@
-# https://github.com/XinJingHao/PPO-Continuous-Pytorch
 import copy
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Beta, Normal
+from torch.distributions import Normal
 import math
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+class Conv1dEncoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.Conv1d(1, 1, 1, padding='same'),
+            # nn.ReLU(),
+            nn.AvgPool1d(10),
+            # nn.Conv1d(1, 1, 9, padding='same'),
+            # nn.ReLU(),
+            nn.AvgPool1d(2),
+            nn.Flatten(),
+        )
+
+    def forward(self, x):
+        x = x.unsqueeze(1)
+        y = self.model(x)
+        return y
 
 
 class Actor(nn.Module):
@@ -60,6 +78,7 @@ class PPO(object):
             net_width=256,
             a_lr=3e-4,
             c_lr=3e-4,
+            e_lr = 3e-4,
             l2_reg=1e-3,
             dist='Beta',
             a_optim_batch_size=64,
@@ -68,6 +87,9 @@ class PPO(object):
             entropy_coef_decay=0.9998,
             **kwargs
     ):
+        self.encoder = Conv1dEncoder().to(device)
+        self.encoder_optimizer = torch.optim.Adam(self.encoder.parameters(), lr=e_lr)
+
         self.actor = Actor(state_dim, action_dim, net_width).to(device)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
         self.dist = dist
@@ -92,7 +114,7 @@ class PPO(object):
     def select_action(self, state):  # only used when interact with the env
         with torch.no_grad():
             state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-            dist = self.actor.get_dist(state)
+            dist = self.actor.get_dist(self.encoder(state))
             a = dist.sample()
             a = torch.clamp(a, 0, 1)
             logprob_a = dist.log_prob(a).cpu().numpy().flatten()
@@ -101,7 +123,7 @@ class PPO(object):
     def evaluate(self, state):  # only used when evaluate the policy.Making the performance more stable
         with torch.no_grad():
             state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-            a, b = self.actor(state)
+            a, b = self.actor(self.encoder(state))
             return a.cpu().numpy().flatten(), 0.0
 
     def train(self):
@@ -109,8 +131,8 @@ class PPO(object):
         s, a, r, s_prime, logprob_a, done_mask, dw_mask = self.make_batch()
 
         with torch.no_grad():
-            vs = self.critic(s)
-            vs_ = self.critic(s_prime)
+            vs = self.critic(self.encoder(s))
+            vs_ = self.critic(self.encoder(s_prime))
 
             deltas = r + self.gamma * vs_ * (1 - dw_mask) - vs
 
@@ -139,7 +161,7 @@ class PPO(object):
 
             for i in range(a_optim_iter_num):
                 index = slice(i * self.a_optim_batch_size, min((i + 1) * self.a_optim_batch_size, s.shape[0]))
-                distribution = self.actor.get_dist(s[index])
+                distribution = self.actor.get_dist(self.encoder(s[index]))
                 dist_entropy = distribution.entropy().sum(1, keepdim=True)
                 logprob_a_now = distribution.log_prob(a[index])
                 ratio = torch.exp(logprob_a_now.sum(1, keepdim=True) - logprob_a[index].sum(1,
@@ -150,20 +172,24 @@ class PPO(object):
                 a_loss = -torch.min(surr1, surr2) - self.entropy_coef * dist_entropy
 
                 self.actor_optimizer.zero_grad()
+                self.encoder_optimizer.zero_grad()
                 a_loss.mean().backward()
                 torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 40)
                 self.actor_optimizer.step()
+                self.encoder_optimizer.step()
 
             for i in range(c_optim_iter_num):
                 index = slice(i * self.c_optim_batch_size, min((i + 1) * self.c_optim_batch_size, s.shape[0]))
-                c_loss = (self.critic(s[index]) - td_target[index]).pow(2).mean()
+                c_loss = (self.critic(self.encoder(s[index])) - td_target[index]).pow(2).mean()
                 for name, param in self.critic.named_parameters():
                     if 'weight' in name:
                         c_loss += param.pow(2).sum() * self.l2_reg
 
                 self.critic_optimizer.zero_grad()
+                self.encoder_optimizer.zero_grad()
                 c_loss.backward()
                 self.critic_optimizer.step()
+                self.encoder_optimizer.step()
 
     def make_batch(self):
         s_lst, a_lst, r_lst, s_prime_lst, logprob_a_lst, done_lst, dw_lst = [], [], [], [], [], [], []
@@ -203,7 +229,9 @@ class PPO(object):
     def save(self, episode):
         torch.save(self.critic.state_dict(), "./model/ppo_critic{}.pth".format(episode))
         torch.save(self.actor.state_dict(), "./model/ppo_actor{}.pth".format(episode))
+        torch.save(self.encoder.state_dict(), "./model/encoder{}.pth".format(episode))
 
     def load(self, episode):
         self.critic.load_state_dict(torch.load("./model/ppo_critic{}.pth".format(episode)))
         self.actor.load_state_dict(torch.load("./model/ppo_actor{}.pth".format(episode)))
+        self.encoder.load_state_dict(torch.load("./model/encoder{}.pth".format(episode)))

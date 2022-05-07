@@ -147,6 +147,13 @@ class Lidar_Manager:
         self.lidar_window = np.hstack([self.lidar_scanPic, self.lidar_reconstructPic])
         print(f'lidar_window shape{self.lidar_window.shape}')
 
+    def reset_obs_dim(self, new_dim):
+        self.scan_dim = new_dim
+        self.dimension = new_dim
+        self.lidar_angles = np.linspace(self.angle_min, self.angle_max, self.dimension) * np.pi / 180
+        self.obs_gap = int(1080 / new_dim)
+        print(f'reset lidar manager obs dimension to{new_dim}')
+
     def rays2world(self, distance):
         # convert lidar scan distance to 2d locations in space
         x = distance * np.cos(self.lidar_angles)
@@ -155,9 +162,10 @@ class Lidar_Manager:
 
     def grid_cell_from_xy(self, x, y):
         # convert 2d locations in space to 2d array coordinates
-        x = np.clip(x, self.x_min, self.x_max)
-        y = np.clip(y, self.y_min, self.y_max)
+        x = np.clip(x, self.x_min, self.x_max).flatten()
+        y = np.clip(y, self.y_min, self.y_max).flatten()
 
+        # print(x.shape)
         cell_indices = np.zeros((2, x.shape[0]), dtype='int')
         cell_indices[0, :] = np.floor((x - self.x_min) / self.resolution)
         cell_indices[1, :] = np.floor((y - self.y_min) / self.resolution)
@@ -246,17 +254,24 @@ class F110Env_RL:
         # self._max_episode_steps = time_limit
 
         self.episode = []
+        self.starting_idx = None
 
-    def reset(self):
-        starting_idx = random.sample(range(len(self.waypoints_xytheta)), 1)
+    def reset(self, traceback_restart=False):
+        if traceback_restart and self.starting_idx:
+            starting_idx = self.starting_idx
+        else:
+            starting_idx = random.sample(range(len(self.waypoints_xytheta)), 1)
         # print(self.waypoints_xytheta[starting_idx])
         x, y = self.waypoints_xytheta[starting_idx][0, 0], self.waypoints_xytheta[starting_idx][
             0, 1]  # because self.waypoints_xytheta[starting_idx] has shape(1,3)
         # theta = 2*random.random() - 1
         theta_noise = (2*random.random() - 1) * 0.2
         theta = self.waypoints_xytheta[starting_idx][0, 2] + theta_noise
+        # print(theta)
         starting_pos = np.array([[x, y, theta]])
         # starting_pos[-1] += 0.5
+        # print(starting_pos)
+        # import ipdb; ipdb.set_trace()
         raw_obs, _, _, _ = self.f110.reset(starting_pos)
         # raw_obs, _, _, _ = self.f110.reset(np.array([[self.conf.sx, self.conf.sy, self.conf.stheta]]))
         obs = self.get_obs(raw_obs)
@@ -408,6 +423,7 @@ class F110Env_Continuous_Action(F110Env_RL):
         # done = False
         raw_obs, reward, done, info = self.f110.step(exe_action)
         info = {}
+        # info['raw_obs'] = raw_obs
         ##  make 2 step with the same action
         # step = 3
         # while not done and step > 0:
@@ -431,6 +447,7 @@ class F110Env_Continuous_Action(F110Env_RL):
             obs['terminal'] = np.array(False if self.no_terminal else done)
             obs['reset'] = np.array(False)
             obs['scans'] = raw_obs['scans'][0]
+            obs['restart_wp'] = -1
             # import ipdb
             # ipdb.set_trace()
 
@@ -439,8 +456,13 @@ class F110Env_Continuous_Action(F110Env_RL):
                 # import ipdb
                 # ipdb.set_trace()
                 # print(self.episode)
+                cur_pos = np.array([raw_obs['poses_x'][0], raw_obs['poses_y'][0]])
+                starting_idx = self.wpManager.get_nearest_wp(cur_pos)
+                self.starting_idx = (starting_idx - 5) % len(self.wpManager.wp)
                 episode = {k: np.array([t[k] for t in self.episode]) for k in self.episode[0]}
                 info['episode'] = episode
+        else:
+            info['scans'] = raw_obs['scans'][0]
 
         return obs, reward, done, info
 
@@ -478,6 +500,7 @@ class F110Env_LiDAR_Action(F110Env_RL):
         # done = False
         raw_obs, reward, done, info = self.f110.step(exe_action)
         info = {}
+        # info['raw_obs'] = raw_obs
         ##  make 2 step with the same action
         # step = 3
         # while not done and step > 0:
@@ -554,17 +577,20 @@ def test_env(debug=False):
     env_cfg['render_env'] = True
     env_cfg['display_lidar'] = True
     env_cfg['obs_shape'] = 1080
-    env_cfg['lidar_action'] = True
-    env_cfg['sim_cfg_file'] = "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml"
+    env_cfg['lidar_action'] = False
+    # env_cfg['sim_cfg_file'] = "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml"
     # env_cfg['lidar_action'] = True
     # import ipdb; ipdb.set_trace()
     env = create_f110env(**env_cfg)
     policy = GapFollowPolicy()
     # policy = RandomPolicy(action_space=env.action_space)
-    wp_manager = Waypoints_Manager(save_wp=False)
+    wp_manager = Waypoints_Manager(save_wp=True)
 
-    for ep_i in range(5):
+    for ep_i in range(100):
+        # try:
         obs = env.reset()
+        # except:
+        #     continue
         done = False
         i = 0
         min_obs = []
@@ -583,10 +609,13 @@ def test_env(debug=False):
             # target_idx = metric['target_idx']
             # print(action)
             obs, step_reward, done, info = env.step(action)
+            # print(info)
+            # import ipdb;ipdb.set_trace()
+            # wp_manager.save_wp(info['raw_obs'])
             # print(obs['reward'])
             ##### random #######
             # obs, step_reward, done, info = env.step(0)
-            # env.lidarManager.update_lidar_windows(wait=1, obs=obs)
+            env.lidarManager.update_lidar_windows(wait=1, obs=obs)
             if i % 10 == 0:
                 # print(f'step_reward: {step_reward}')
                 # print(min(obs['vecobs']))
