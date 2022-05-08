@@ -26,7 +26,7 @@ def get_dreamer_cfg():
     # for name in args.configs:
     # TODO: add parameters
     name = 'defaults,f110env'
-    name = 'defaults,lidar'
+    # name = 'defaults,lidar'
     if ',' in name:
         for n in name.split(','):
             conf.update(configs[n])
@@ -69,7 +69,7 @@ def evaluate_dreamer_model(checkpoint_path=None):
     dreamer_policy = NetworkPolicy(dreamer_model, preprocess)
 
     # TODO: add parameters
-    env = create_dictObs_eval_env(lidar_action=True)
+    env = create_dictObs_eval_env(lidar_action=False)
 
     for i in range(5):
         obs = env.reset()
@@ -81,7 +81,9 @@ def evaluate_dreamer_model(checkpoint_path=None):
             env.render()
 
             ##### use policy ######
+            # import ipdb;ipdb.set_trace()
             action, metric = dreamer_policy(obs)
+            print(f'current_action: {action}')
             obs, step_reward, done, info = env.step(action)
             if i % 10 == 0:
                 # print(f'step_reward: {step_reward}')
@@ -145,9 +147,36 @@ def get_reconstruct_lidar():
     cv2.imshow('lidar reconstruction', maps)
     cv2.waitKey(10000)
 
+def get_dream_img():
+    import matplotlib.pyplot as plt
+    import cv2
+    lidar_manager = Lidar_Manager(scan_dim=1080, window_H=250, xy_range=30)
+
+    mlrun_dir = path_filler('mlruns/0')
+    for run_id in os.listdir(mlrun_dir):
+        print(run_id)
+        if os.path.isdir(os.path.join(mlrun_dir, run_id)):
+            npz_dir = os.path.join(mlrun_dir, run_id, 'artifacts/d2_wm_dream')
+            latest_npz = '0001001.npz'
+            print(f'load npz from {os.path.join(npz_dir, latest_npz)}')
+            # with open(os.path.join(npz_dir, latest_npz)) as f:
+            fdata = np.load(os.path.join(npz_dir, latest_npz), mmap_mode='r')      
+    # print(list(fdata.keys()))
+    dream_images = fdata['image']
+    one_seq = dream_images[0].squeeze(-1)
+    # print(one_seq.shape)
+    seq_imgs = one_seq[0]
+    for i in range(1, 20):
+        seq_imgs = np.hstack([seq_imgs, one_seq[i]])
+    # print(dream_images.shape)
+    cv2.imshow('dream_images', seq_imgs)
+    cv2.waitKey(10000)
+
+
 if __name__ == '__main__':
     # fire.Fire({
     #     'eval_visual_env': evaluate_dreamer_model,
-    #     'see_dream': get_reconstruct_lidar
+    #     'see_dream': get_reconstruct_lidar,
+    #     'get_dream_img':get_dream_img
     # })
-    evaluate_dreamer_model()
+    evaluate_dreamer_model('./model/scan_w_velocity/1224.pt')

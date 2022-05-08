@@ -56,7 +56,7 @@ def diag_normal(x: Tensor, min_std=0.1, max_std=2.0):
     return D.independent.Independent(D.normal.Normal(mean, std), 1)
 
 
-def normal_tanh(x: Tensor, min_std=0.01, max_std=1.0):
+def normal_tanh(x: Tensor, min_std=0.01, max_std=0.1):
     # Normal(tanh(x))
     mean_, std_ = x.chunk(2, -1)
     mean = torch.tanh(mean_)

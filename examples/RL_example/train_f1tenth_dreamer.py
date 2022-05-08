@@ -592,12 +592,13 @@ if __name__ == '__main__':
     configs = tools.read_yamls('./config')
     # for name in args.configs:
     name = 'defaults,lidar'
+    # name = 'defaults,f110env'
     if ',' in name:
         for n in name.split(','):
             conf.update(configs[n])
     else:
         conf.update(configs[name])
-    conf['run_name'] = 'lidar'
+    conf['run_name'] = 'lidar_map'
     # Override config from command-line
     # parser = argparse.ArgumentParser()
     for key, value in conf.items():

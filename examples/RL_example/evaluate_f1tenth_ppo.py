@@ -19,11 +19,17 @@ def evaluate_policy(env, model, render, steps_per_epoch, max_action, obs_gap=Non
     turns = 2
     for j in range(turns):
         s, done, ep_r, steps = env.reset(), False, 0, 0
+        i = 0
         while not (done or (steps >= steps_per_epoch)):
             # Take deterministic actions at test time
+            i += 1
             a, logprob_a = model.evaluate(s)
             act = action_adapter(a, max_action)  # [0,1] to [-max,max]
-            s_prime, r, done, info = env.step(act)
+            s_prime, r, done, info = env.step(act, steps=1)
+            if i % 20 == 0:
+                angel_v = info['angel_v']
+                print(f'current_action: {act}')
+                print(f'current_angel_v: {angel_v}')
             # r = Reward_adapter(r, EnvIdex)
             if env.display_lidar:
                 env.lidarManager.update_lidar_windows(wait=1, obs=info)
@@ -36,7 +42,7 @@ def evaluate_policy(env, model, render, steps_per_epoch, max_action, obs_gap=Non
     return scores / turns
 
 
-def evaluate_continuous_ppo():
+def evaluate_continuous_ppo(episode=16000):
     env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
     env_cfg['dictObs'] = False
     env_cfg['obs_shape'] = 1080
@@ -54,7 +60,9 @@ def evaluate_continuous_ppo():
     model = PPO(**kwargs)
     # model.actor.load_state_dict(torch.load('./evaluate_model/ppo/ppo_actor70000.pth'))
     # model.critic.load_state_dict(torch.load('./evaluate_model/ppo/ppo_critic70000.pth'))
-    model.load(episode=19000)
+    # 9, 13, 14, 25
+    # 15
+    model.load(episode=episode)
 
     env.lidarManager.reset_obs_dim(new_dim=kwargs['state_dim'])
     for _ in range(5):

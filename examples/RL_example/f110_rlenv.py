@@ -268,7 +268,8 @@ class F110Env_RL:
         x, y = self.waypoints_xytheta[starting_idx][0, 0], self.waypoints_xytheta[starting_idx][
             0, 1]  # because self.waypoints_xytheta[starting_idx] has shape(1,3)
         # theta = 2*random.random() - 1
-        theta_noise = (2*random.random() - 1) * 0.2
+        # TODO: add noist to init theta
+        theta_noise = (2*random.random() - 1) * 1.0
         theta = self.waypoints_xytheta[starting_idx][0, 2] + theta_noise
         # print(theta)
         starting_pos = np.array([[x, y, theta]])
@@ -295,7 +296,21 @@ class F110Env_RL:
         return obs
 
     def get_obs(self, raw_obs: dict):
-        obs = raw_obs['scans'][0][::self.observation_gap]
+        # TODO: add noise to lidar
+        # print(raw_obs['ang_vels_z'])
+        scans = raw_obs['scans'][0].flatten()
+        if not self.lidar_action:
+            # random noise
+            # noise = np.random.random(scans.shape[0])
+            # noise = (2*noise-1) * 0.08
+            
+            # Gaussian noise
+            noise = np.random.normal(0, 0.04, scans.shape[0])
+            noise = np.clip(noise, -0.08, 0.08)
+            scans = noise + scans 
+            # print(noise)
+        obs = scans[::self.observation_gap]
+
         # print(self.observation_gap)
         if self.dictObs:
             if len(obs.shape) == 1:
@@ -305,19 +320,25 @@ class F110Env_RL:
         else:
             return obs
 
-    def get_reward(self, raw_obs: dict, crash: bool):
+    def get_reward(self, raw_obs: dict, crash: bool, action=None):
         # if 'raw_obs' in raw_obs.keys():
         #     raw_obs = raw_obs['raw_obs']
         wp_based_error = self.wpManager.get_wpbased_error(raw_obs)
 
         if crash:
-            reward = -0.05
+            reward = -0.5
         elif wp_based_error > self.lateral_error_thres:
             # print(f'lateral_error:{wp_based_error}')
             reward = 0.0
             # reward -= wp_based_error * 0.01
         else:
             reward = 0.02
+        #
+        # if abs(raw_obs['ang_vels_z'][0]) < 1.2:
+        reward = reward - np.clip(abs(raw_obs['ang_vels_z'][0]), 0, 1.5) * 0.02
+        # if action:
+        #     reward = reward - np.clip(abs(action), 0, 1.0) * 0.02
+        # print(reward)
         return reward
 
     def render(self, mode='human'):
@@ -406,8 +427,8 @@ class F110Env_Continuous_Action(F110Env_RL):
         # if type(action) != int:
         #     return action.reshape(1, -1)
         # try:
-        if type(action) == np.ndarray:
-            action = action[0]
+        # if type(action) == np.ndarray:
+        #     action = action[0]
         # except:
         #     print('no valid steer')
         #     print(action)
@@ -418,7 +439,9 @@ class F110Env_Continuous_Action(F110Env_RL):
         action = np.array([steer, self.speed]).astype(np.float32)
         return action.reshape(1, -1)
 
-    def step(self, action):
+    def step(self, action, steps=None):
+        if type(action) == np.ndarray:
+            action = action[0]        
         exe_action = self.get_action(action)
         # import ipdb
         # ipdb.set_trace()
@@ -427,14 +450,18 @@ class F110Env_Continuous_Action(F110Env_RL):
         raw_obs, reward, done, info = self.f110.step(exe_action)
         info = {}
         # info['raw_obs'] = raw_obs
-        ##  make 2 step with the same action
-        # step = 3
-        # while not done and step > 0:
-        #     raw_obs, reward, done, info = self.f110.step(action)
-        #     step -= 1
+        ##  make 3 step with the same action
+        if steps:
+            step = steps
+        else:
+            # for training
+            step = 2
+        while not done and step > 0:
+            raw_obs, reward, done, info = self.f110.step(exe_action)
+            step -= 1
         ##  give penalty for hitting the wall
         obs = self.get_obs(raw_obs)
-        reward = self.get_reward(raw_obs, done)
+        reward = self.get_reward(raw_obs, done, action)
 
         # time_limit
         if self.limited_time:
@@ -450,7 +477,7 @@ class F110Env_Continuous_Action(F110Env_RL):
             obs['terminal'] = np.array(False if self.no_terminal else done)
             obs['reset'] = np.array(False)
             obs['scans'] = raw_obs['scans'][0]
-            obs['restart_wp'] = -1
+            obs['restart_wp'] = np.array(-1)
             # import ipdb
             # ipdb.set_trace()
 
@@ -466,6 +493,7 @@ class F110Env_Continuous_Action(F110Env_RL):
                 info['episode'] = episode
         else:
             info['scans'] = raw_obs['scans'][0]
+            info['angel_v'] = raw_obs['ang_vels_z'][0]
 
         return obs, reward, done, info
 
@@ -503,6 +531,7 @@ class F110Env_LiDAR_Action(F110Env_RL):
         # done = False
         raw_obs, reward, done, info = self.f110.step(exe_action)
         info = {}
+        # print(raw_obs['ang_vels_z'])
         # info['raw_obs'] = raw_obs
         ##  make 2 step with the same action
         # step = 3

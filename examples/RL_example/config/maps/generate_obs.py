@@ -49,7 +49,7 @@ import random
 
 
 def check_distance(p_list, min_len):
-    print("p_list", p_list.shape)
+    # print("p_list", p_list.shape)
     num_object = p_list.shape[0]
     p = p_list.reshape(p_list.shape[0], 2)
     for i in range(num_object):
@@ -98,11 +98,11 @@ def set_obstacle(img, square, object_num, type_):
         tmp_image = draw_rect(reverse_image, p[1], p[0], ob_s)
         reverse_image1 = np.where(image < 0.5, 1., 0.)
         t = np.unique(tmp_image + reverse_image1)
-        print(np.max(t))
+        # print(np.max(t))
         if np.max(t) < 3.0 and check_:
             check_ = True
             image_ = np.where(tmp_image < 0.5, 1., 0.)
-            print("check", check_)
+            # print("check", check_)
         else:
             check_ = False
         # if check_==True:
@@ -124,13 +124,14 @@ def each_part_set_obstacle(image, square, num, min_length, type_):
                 image_, p = set_obstacle(image_, square, 1, type_=type_)
                 p_array.append(p)
         check_ = check_distance(np.array(p_array), min_length)
+        print(p_array)
     return image_
 
 
-print(image.shape)
+# print(image.shape)
 image = np.where(image < 0.5, 0., 1.0)
-print(image)
-plt.imshow(image, cmap='gray')
+# print(image)
+# plt.imshow(image, cmap='gray')
 square_l = np.zeros((4, 2))
 square_l[0] = np.array([45., 160.])
 square_l[1] = np.array([50., 306.])
@@ -155,11 +156,11 @@ square_t[0] = np.array([78., 129.])
 square_t[1] = np.array([78., 160.])
 square_t[2] = np.array([513., 147.])
 square_t[3] = np.array([513., 115.])
-plt.show()
+# plt.show()
 parser = argparse.ArgumentParser()
-parser.add_argument("--num_long_size", type=int, default=5)
+parser.add_argument("--num_long_size", type=int, default=4)
 parser.add_argument("--num_short_size", type=int, default=2)
-parser.add_argument("--min_length", type=float, default=20.)
+parser.add_argument("--min_length", type=float, default=40.)
 args = parser.parse_args()
 object_num_long = 2
 num_long_size = args.num_long_size
@@ -168,9 +169,8 @@ image_ = each_part_set_obstacle(image, square_t, num_long_size, args.min_length,
 image_ = each_part_set_obstacle(image_, square_b, num_long_size, args.min_length, "bottom")
 image_ = each_part_set_obstacle(image_, square_l, num_short_size, args.min_length, "left")
 image_ = each_part_set_obstacle(image_, square_r, num_short_size, args.min_length, "right")
-# plt.imshow(image_)
-import cv2
 
 image_ = image_ + original_image - 1.0
-cv2.imshow('image', image_)
+import cv2
+cv2.imshow('image_', image_)
 cv2.waitKey(0)

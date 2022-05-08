@@ -10,7 +10,7 @@ defaults:
   offline_eval_dir:
   log_interval: 100
   logbatch_interval: 1000
-  save_interval: 10
+  save_interval: 500
   eval_interval: 1000
   data_workers: 4
   enable_profiler: False
