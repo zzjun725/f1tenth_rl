@@ -54,7 +54,7 @@ def evaluate_continuous_ppo():
     model = PPO(**kwargs)
     # model.actor.load_state_dict(torch.load('./evaluate_model/ppo/ppo_actor70000.pth'))
     # model.critic.load_state_dict(torch.load('./evaluate_model/ppo/ppo_critic70000.pth'))
-    model.load(episode=30000)
+    model.load(episode=19000)
 
     env.lidarManager.reset_obs_dim(new_dim=kwargs['state_dim'])
     for _ in range(5):

@@ -24,7 +24,9 @@ def get_dreamer_cfg():
     conf = {}
     configs = tools.read_yamls('./config')
     # for name in args.configs:
+    # TODO: add parameters
     name = 'defaults,f110env'
+    name = 'defaults,lidar'
     if ',' in name:
         for n in name.split(','):
             conf.update(configs[n])
@@ -65,7 +67,9 @@ def evaluate_dreamer_model(checkpoint_path=None):
     checkpoint = torch.load(checkpoint_path, map_location='cpu')
     dreamer_model.load_state_dict(checkpoint['model_state_dict'])
     dreamer_policy = NetworkPolicy(dreamer_model, preprocess)
-    env = create_dictObs_eval_env()
+
+    # TODO: add parameters
+    env = create_dictObs_eval_env(lidar_action=True)
 
     for i in range(5):
         obs = env.reset()

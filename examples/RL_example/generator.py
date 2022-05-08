@@ -72,16 +72,17 @@ def main(env_id='MiniGrid-MazeS11N-v0',
     # Env
     env_cfg = {
         "speed": 3,
-        "obs_shape": 108,
+        "obs_shape": 1080,
         "lidar_action": True,
-        "sim_cfg_file": "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_example_map.yaml",
+        "sim_cfg_file": "/home/mlab/zhijunz/dreamerv2_dev/f1tenth_rl/examples/RL_example/config/maps/config_levine_block.yaml",
         "limited_time": False,
         "no_terminal": False,
         "env_time_limit": 0,
         "env_action_repeat": 1,
         "render_env": False,
         "dictObs": True,
-        'display_lidar': False
+        'display_lidar': False,
+        'continuous_action': True
     }
 
     env = create_f110env(**env_cfg)

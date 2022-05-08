@@ -46,11 +46,14 @@ def create_f110env(**kargs):
     return env
 
 
-def create_dictObs_eval_env(cfg=None):
+def create_dictObs_eval_env(cfg=None, lidar_action=True):
     env_cfg = json.load(open(os.path.join(path_filler('config'), 'rlf110_env_cfg.json')))
     env_cfg['dictObs'] = True
     env_cfg['render_env'] = True
     env_cfg['obs_shape'] = 108
+    if lidar_action:
+        env_cfg['obs_shape'] = 1080
+        env_cfg['lidar_action'] = True
     env = create_f110env(**env_cfg)
     return env
 
