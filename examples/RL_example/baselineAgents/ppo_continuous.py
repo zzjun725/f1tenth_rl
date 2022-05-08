@@ -1,4 +1,3 @@
-# https://github.com/XinJingHao/PPO-Continuous-Pytorch
 import copy
 import numpy as np
 import torch

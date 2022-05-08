@@ -9,7 +9,7 @@ Install other requirements:
 
 `pip install -r requirements.txt` 
 
-Note: logging dependency is for dreamer training. If you just want to evaluate the model provided in evaluate_model, you can skip that
+Note: logging dependency(such as mlflow) is for dreamer training. If you just want to evaluate the model provided in evaluate_model, you can skip that
 
 # Usage
 All the codes related is under example/RL_example. To run on your computer, you need to re-generate the config files to solve the path dependency.
