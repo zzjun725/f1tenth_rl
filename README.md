@@ -1,6 +1,8 @@
 # Environment
 The environment used by this project is forked from the [f1tenth environment](https://github.com/f1tenth/f1tenth_gym).
 
+Check cnn_dreamer branch for latest code(kind of rough though:(
+
 Install the environment: inside this repo, run 
 
 `pip3 install --user -e gym/`
